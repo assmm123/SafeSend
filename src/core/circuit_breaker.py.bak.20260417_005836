@@ -1,0 +1,448 @@
+"""
+Circuit Breaker Pattern - حماية الخدمات الخارجية من الفشل المتكرر
+Circuit Breaker Pattern - Protect external services from cascading failures
+
+يمنع هذا النمط استدعاء خدمة فاشلة بشكل متكرر، مما يسمح للنظام بالتعافي
+ويمنع استنزاف الموارد في محاولات فاشلة.
+
+Prevents repeated calls to a failing service, allowing the system to recover
+and preventing resource exhaustion from failed attempts.
+
+الحالات الثلاث:
+- CLOSED: العمل الطبيعي، يتم استدعاء الخدمة
+- OPEN: الخدمة معطلة، يتم رفض جميع الاستدعاءات فوراً
+- HALF_OPEN: حالة اختبار، نسمح بعدد محدود من الاستدعاءات للتحقق من التعافي
+
+Three states:
+- CLOSED: Normal operation, service is called
+- OPEN: Service is down, all calls are rejected immediately
+- HALF_OPEN: Testing state, limited calls allowed to check recovery
+
+Example:
+    ```python
+    cb = CircuitBreaker(failure_threshold=5, timeout=60.0)
+    
+    def call_external_api(data):
+        return requests.post(url, json=data)
+    
+    result = cb.call(call_external_api, {"key": "value"})
+    ```
+"""
+
+import time
+import threading
+from enum import Enum
+from typing import Callable, Optional, Dict, Any
+from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class CircuitBreakerState(Enum):
+    """
+    حالات الـ Circuit Breaker
+    Circuit Breaker States
+    
+    Attributes:
+        CLOSED: الحالة الطبيعية - يتم استدعاء الخدمة
+        OPEN: الدائرة مفتوحة - يتم رفض جميع الاستدعاءات
+        HALF_OPEN: حالة اختبار - نسمح بعدد محدود من الاستدعاءات
+    """
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+class CircuitBreakerOpenError(Exception):
+    """
+    يُرمى عندما يكون الـ Circuit Breaker مفتوحاً ويرفض الاستدعاء
+    Raised when the Circuit Breaker is open and rejects calls
+    """
+    pass
+
+
+class CircuitBreaker:
+    """
+    Circuit Breaker Pattern Implementation
+    تطبيق نمط قاطع الدائرة
+    
+    يحمي الخدمات الخارجية من الاستدعاءات المتكررة عند الفشل
+    Protects external services from repeated calls during failures
+    
+    Args:
+        failure_threshold (int): عدد مرات الفشل قبل فتح الدائرة
+        timeout (float): مدة البقاء مفتوحاً بالثواني
+        half_open_max_calls (int): الحد الأقصى للاستدعاءات في حالة HALF_OPEN
+        half_open_success_threshold (int): عدد النجاحات المطلوبة للإغلاق
+        on_open (Optional[Callable]): callback عند فتح الدائرة
+        on_close (Optional[Callable]): callback عند إغلاق الدائرة
+    
+    Example:
+        ```python
+        cb = CircuitBreaker(failure_threshold=5, timeout=60.0)
+        
+        def risky_operation():
+            return external_api_call()
+        
+        try:
+            result = cb.call(risky_operation)
+        except CircuitBreakerOpenError:
+            print("Service unavailable, using fallback")
+        ```
+    """
+    
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        timeout: float = 60.0,
+        half_open_max_calls: int = 3,
+        half_open_success_threshold: int = 2,
+        on_open: Optional[Callable[[], None]] = None,
+        on_close: Optional[Callable[[], None]] = None
+    ):
+        """
+        تهيئة Circuit Breaker
+        Initialize Circuit Breaker
+        
+        Args:
+            failure_threshold: عدد مرات الفشل قبل فتح الدائرة
+            timeout: مدة البقاء مفتوحاً بالثواني
+            half_open_max_calls: الحد الأقصى للاستدعاءات في حالة HALF_OPEN
+            half_open_success_threshold: عدد النجاحات المطلوبة للإغلاق
+            on_open: دالة تستدعى عند فتح الدائرة
+            on_close: دالة تستدعى عند إغلاق الدائرة
+        """
+        self.failure_threshold: int = failure_threshold
+        self.timeout: float = timeout
+        self.half_open_max_calls: int = half_open_max_calls
+        self.half_open_success_threshold: int = half_open_success_threshold
+        self.on_open: Optional[Callable[[], None]] = on_open
+        self.on_close: Optional[Callable[[], None]] = on_close
+        
+        self._state: CircuitBreakerState = CircuitBreakerState.CLOSED
+        self._failure_count: int = 0
+        self._success_count: int = 0
+        self._total_calls: int = 0
+        self._open_count: int = 0
+        self._half_open_success_count: int = 0
+        self._half_open_calls: int = 0
+        self._last_failure_time: Optional[float] = None
+        self._last_success_time: Optional[float] = None
+        self._opened_at: Optional[float] = None
+        self._lock: threading.RLock = threading.RLock()
+    
+    def call(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+        """
+        استدعاء الدالة المحمية بـ Circuit Breaker
+        Call the protected function with circuit breaker
+        
+        Args:
+            func: الدالة المراد استدعاؤها
+            *args: معاملات الدالة
+            **kwargs: معاملات الدالة المسماة
+        
+        Returns:
+            نتيجة الدالة المحمية
+        
+        Raises:
+            CircuitBreakerOpenError: إذا كانت الدائرة مفتوحة
+            Exception: أي خطأ من الدالة الأصلية
+        """
+        with self._lock:
+            self._total_calls += 1
+            
+            if self._state == CircuitBreakerState.OPEN:
+                if self._should_attempt_reset():
+                    self._transition_to_half_open()
+                else:
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is OPEN. Opened at {self._format_time(self._opened_at)}"
+                    )
+            
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                if self._half_open_calls >= self.half_open_max_calls:
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is HALF_OPEN. Max calls ({self.half_open_max_calls}) reached"
+                    )
+                self._half_open_calls += 1
+        
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as e:
+            self._on_failure()
+            raise e
+    
+    def _on_success(self) -> None:
+        """
+        معالجة نجاح الاستدعاء
+        Handle successful call
+        
+        يقوم بـ:
+        - زيادة عداد النجاح
+        - تحديث وقت آخر نجاح
+        - إعادة تعيين عداد الفشل في حالة CLOSED
+        - التحقق من إمكانية العودة إلى CLOSED في حالة HALF_OPEN
+        
+        Actions:
+        - Increment success counter
+        - Update last success time
+        - Reset failure counter when CLOSED
+        - Check if can return to CLOSED when HALF_OPEN
+        """
+        with self._lock:
+            self._success_count += 1
+            self._last_success_time = time.time()
+            
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._half_open_success_count += 1
+                if self._half_open_success_count >= self.half_open_success_threshold:
+                    self._transition_to_closed()
+            elif self._state == CircuitBreakerState.CLOSED:
+                self._failure_count = 0
+    
+    def _on_failure(self) -> None:
+        """
+        معالجة فشل الاستدعاء
+        Handle call failure
+        
+        يقوم بـ:
+        - زيادة عداد الفشل
+        - تحديث وقت آخر فشل
+        - الانتقال إلى OPEN إذا تجاوز الحد في CLOSED
+        - الانتقال مباشرة إلى OPEN في حالة HALF_OPEN
+        
+        Actions:
+        - Increment failure counter
+        - Update last failure time
+        - Transition to OPEN if threshold exceeded in CLOSED
+        - Transition directly to OPEN when HALF_OPEN
+        """
+        with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.time()
+            
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._transition_to_open()
+            elif self._state == CircuitBreakerState.CLOSED:
+                if self._failure_count >= self.failure_threshold:
+                    self._transition_to_open()
+    
+    def _should_attempt_reset(self) -> bool:
+        """
+        التحقق مما إذا كان يجب محاولة إعادة التعيين
+        Check if reset should be attempted
+        
+        Returns:
+            bool: True إذا انقضت مدة timeout منذ فتح الدائرة
+            
+        Returns:
+            bool: True if timeout period has elapsed since circuit opened
+        """
+        if self._opened_at is None:
+            return True
+        return (time.time() - self._opened_at) >= self.timeout
+    
+    def _transition_to_open(self) -> None:
+        """
+        الانتقال إلى حالة OPEN
+        Transition to OPEN state
+        
+        يقوم بـ:
+        - تغيير الحالة إلى OPEN
+        - تسجيل وقت الفتح
+        - زيادة عداد مرات الفتح
+        - إعادة تعيين عدادات HALF_OPEN
+        - تسجيل تحذير في السجلات
+        - استدعاء on_open callback إذا وجد
+        
+        Actions:
+        - Change state to OPEN
+        - Record open time
+        - Increment open counter
+        - Reset HALF_OPEN counters
+        - Log warning
+        - Call on_open callback if exists
+        """
+        old_state = self._state
+        self._state = CircuitBreakerState.OPEN
+        self._opened_at = time.time()
+        self._open_count += 1
+        self._half_open_calls = 0
+        self._half_open_success_count = 0
+        
+        logger.warning(
+            f"Circuit breaker transitioned from {old_state.value} to OPEN. "
+            f"Failures: {self._failure_count}/{self.failure_threshold}"
+        )
+        
+        if self.on_open:
+            try:
+                self.on_open()
+            except Exception as e:
+                logger.error(f"on_open callback failed: {e}")
+    
+    def _transition_to_half_open(self) -> None:
+        """
+        الانتقال إلى حالة HALF_OPEN
+        Transition to HALF_OPEN state
+        
+        يقوم بـ:
+        - تغيير الحالة إلى HALF_OPEN
+        - إعادة تعيين عدادات HALF_OPEN
+        - تسجيل معلومات في السجلات
+        
+        Actions:
+        - Change state to HALF_OPEN
+        - Reset HALF_OPEN counters
+        - Log info
+        """
+        old_state = self._state
+        self._state = CircuitBreakerState.HALF_OPEN
+        self._half_open_calls = 0
+        self._half_open_success_count = 0
+        
+        logger.info(f"Circuit breaker transitioned from {old_state.value} to HALF_OPEN")
+    
+    def _transition_to_closed(self) -> None:
+        """
+        الانتقال إلى حالة CLOSED
+        Transition to CLOSED state
+        
+        يقوم بـ:
+        - تغيير الحالة إلى CLOSED
+        - إعادة تعيين عداد الفشل
+        - إعادة تعيين عدادات HALF_OPEN
+        - مسح وقت الفتح
+        - تسجيل معلومات في السجلات
+        - استدعاء on_close callback إذا وجد
+        
+        Actions:
+        - Change state to CLOSED
+        - Reset failure counter
+        - Reset HALF_OPEN counters
+        - Clear open time
+        - Log info
+        - Call on_close callback if exists
+        """
+        old_state = self._state
+        self._state = CircuitBreakerState.CLOSED
+        self._failure_count = 0
+        self._opened_at = None
+        self._half_open_calls = 0
+        self._half_open_success_count = 0
+        
+        logger.info(f"Circuit breaker transitioned from {old_state.value} to CLOSED")
+        
+        if self.on_close:
+            try:
+                self.on_close()
+            except Exception as e:
+                logger.error(f"on_close callback failed: {e}")
+    
+    def _format_time(self, timestamp: Optional[float]) -> Optional[str]:
+        """
+        تنسيق الطابع الزمني إلى صيغة ISO
+        Format timestamp to ISO format
+        
+        Args:
+            timestamp: الطابع الزمني (ثواني منذ epoch)
+            
+        Returns:
+            Optional[str]: الوقت بصيغة ISO أو None إذا كان timestamp None
+            
+        Example:
+            >>> cb._format_time(1704067200.0)
+            '2024-01-01T00:00:00+00:00'
+        """
+        if timestamp is None:
+            return None
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+    
+    def get_state(self) -> CircuitBreakerState:
+        """
+        الحصول على الحالة الحالية
+        Get current state
+        
+        Returns:
+            CircuitBreakerState: الحالة الحالية للـ Circuit Breaker
+        """
+        with self._lock:
+            return self._state
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """
+        جلب إحصائيات Circuit Breaker
+        Get Circuit Breaker metrics
+        
+        Returns:
+            Dict[str, Any]: قاموس يحتوي على جميع المقاييس
+            
+            Example:
+                {
+                    "state": "closed",
+                    "failure_count": 0,
+                    "success_count": 10,
+                    "total_calls": 10,
+                    "open_count": 0,
+                    "failure_threshold": 5,
+                    "timeout_seconds": 60.0,
+                    "half_open_max_calls": 3,
+                    "half_open_success_threshold": 2,
+                    "last_failure_time": null,
+                    "last_success_time": "2024-01-01T00:00:00+00:00",
+                    "opened_at": null
+                }
+        """
+        with self._lock:
+            return {
+                "state": self._state.value,
+                "failure_count": self._failure_count,
+                "success_count": self._success_count,
+                "total_calls": self._total_calls,
+                "open_count": self._open_count,
+                "failure_threshold": self.failure_threshold,
+                "timeout_seconds": self.timeout,
+                "half_open_max_calls": self.half_open_max_calls,
+                "half_open_success_threshold": self.half_open_success_threshold,
+                "last_failure_time": self._format_time(self._last_failure_time),
+                "last_success_time": self._format_time(self._last_success_time),
+                "opened_at": self._format_time(self._opened_at),
+            }
+    
+    def reset(self) -> None:
+        """
+        إعادة تعيين Circuit Breaker إلى الحالة الأولية
+        Reset Circuit Breaker to initial state
+        
+        يقوم بـ:
+        - إعادة الحالة إلى CLOSED
+        - تصفير جميع العدادات
+        - تسجيل معلومات في السجلات
+        
+        Actions:
+        - Reset state to CLOSED
+        - Reset all counters
+        - Log info
+        """
+        with self._lock:
+            self._state = CircuitBreakerState.CLOSED
+            self._failure_count = 0
+            self._success_count = 0
+            self._total_calls = 0
+            self._open_count = 0
+            self._half_open_success_count = 0
+            self._half_open_calls = 0
+            self._last_failure_time = None
+            self._last_success_time = None
+            self._opened_at = None
+            logger.info("Circuit breaker manually reset to CLOSED")
+
+
+__all__ = [
+    'CircuitBreaker',
+    'CircuitBreakerState',
+    'CircuitBreakerOpenError',
+]

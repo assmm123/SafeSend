@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - إدارة النزاع</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        .dispute-layout { max-width:800px; margin:0 auto; padding:var(--space-6); }
+        .step-progress { display:flex; justify-content:space-between; margin-bottom:var(--space-6); position:relative; }
+        .step-progress::before { content:''; position:absolute; top:20px; left:0; right:0; height:3px; background:var(--border); z-index:0; }
+        .step-progress .step { text-align:center; position:relative; z-index:1; }
+        .step-progress .step .dot { width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-weight:700;border:3px solid var(--border);background:var(--surface);transition:all 0.3s; }
+        .step-progress .step.done .dot { background:var(--success);border-color:var(--success);color:white; }
+        .step-progress .step.active .dot { background:var(--primary);border-color:var(--primary);color:white;box-shadow:0 0 0 6px var(--primary-bg); }
+        .evidence-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:var(--space-3); }
+        .evidence-item { border:2px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;position:relative;cursor:pointer;transition:all 0.2s; }
+        .evidence-item:hover { border-color:var(--primary); transform:translateY(-2px); }
+        .evidence-item img { width:100%;height:100px;object-fit:cover; }
+        .evidence-item .delete-btn { position:absolute;top:4px;left:4px;background:var(--danger);color:white;border:none;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:12px;display:none; }
+        .evidence-item.editable:hover .delete-btn { display:flex;align-items:center;justify-content:center; }
+        .evidence-item .hash { font-size:9px;padding:4px;background:var(--bg-secondary);text-align:center;color:var(--text-light); }
+        .timeline-verdict { background:var(--success-bg);border-right:4px solid var(--success);padding:var(--space-4);border-radius:var(--radius-sm);margin:var(--space-3) 0; }
+        .timeline-verdict.partial { background:var(--warning-bg);border-right-color:var(--warning); }
+        .admin-notes { background:var(--warning-bg);padding:var(--space-3);border-radius:var(--radius-sm);border:1px dashed var(--warning);position:relative; }
+        .admin-notes::before { content:'🔒 ملاحظات المشرف'; font-size:11px;font-weight:700;display:block;margin-bottom:4px;color:var(--warning); }
+        .appeal-banner { background:var(--danger-bg);padding:var(--space-4);border-radius:var(--radius);text-align:center; }
+        @media (max-width:768px) { .step-progress { overflow-x:auto;gap:var(--space-4); } .step-progress .step .label { font-size:10px; } }
+    </style>
+</head>
+<body>
+
+<main class="dispute-layout">
+
+    <!-- Header -->
+    <div class="card mb-4">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <p class="font-bold text-lg">⚠️ نزاع #567</p>
+                <p class="text-muted">صفقة: تصميم موقع احترافي · 500 USDT</p>
+            </div>
+            <span class="badge badge-warning">قيد المراجعة</span>
+        </div>
+    </div>
+
+    <!-- Step Progress -->
+    <div class="step-progress mb-6">
+        <div class="step done"><div class="dot">✓</div><span class="label">فتح النزاع</span></div>
+        <div class="step done"><div class="dot">✓</div><span class="label">إضافة الأدلة</span></div>
+        <div class="step active"><div class="dot">3</div><span class="label">تعيين الوسيط</span></div>
+        <div class="step"><div class="dot">4</div><span class="label">القرار</span></div>
+    </div>
+
+    <!-- Dispute Info -->
+    <div class="card mb-4">
+        <p class="font-semibold mb-3">📋 تفاصيل النزاع</p>
+        <table class="table">
+            <tr><td class="text-muted">فاتح النزاع</td><td class="fw-600">Sara (مشتري)</td></tr>
+            <tr><td class="text-muted">الطرف الآخر</td><td class="fw-600">Ali (بائع)</td></tr>
+            <tr><td class="text-muted">الفئة</td><td><span class="badge badge-warning">جودة العمل غير مطابقة</span></td></tr>
+            <tr><td class="text-muted">تاريخ الفتح</td><td>12 مايو 2024 · 10:30 ص</td></tr>
+            <tr><td class="text-muted">الوسيط</td><td><span style="color:var(--primary);">جاري التعيين...</span></td></tr>
+            <tr><td class="text-muted">المهلة</td><td>⏰ 48 ساعة متبقية للرد</td></tr>
+        </table>
+    </div>
+
+    <!-- Evidence Gallery -->
+    <div class="card mb-4">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3);">
+            <p class="font-semibold">📸 الأدلة المقدمة</p>
+            <button class="btn btn-outline btn-sm" onclick="addEvidence()">+ إضافة دليل</button>
+        </div>
+        <div class="evidence-grid" id="evidenceGrid">
+            <div class="evidence-item editable">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='150'%3E%3Crect fill='%23e8f0fe' width='200' height='150'/%3E%3Ctext x='100' y='80' text-anchor='middle' fill='%231a73e8' font-size='14'%3E📸 لقطة شاشة%3C/text%3E%3C/svg%3E" alt="دليل 1">
+                <button class="delete-btn" onclick="removeEvidence(0)">✕</button>
+                <div class="hash">0x7f3a...b2d1 · 10:35 ص</div>
+            </div>
+            <div class="evidence-item editable">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='150'%3E%3Crect fill='%23e6f4ea' width='200' height='150'/%3E%3Ctext x='100' y='80' text-anchor='middle' fill='%230d904f' font-size='14'%3E📄 عقد الاتفاق%3C/text%3E%3C/svg%3E" alt="دليل 2">
+                <button class="delete-btn" onclick="removeEvidence(1)">✕</button>
+                <div class="hash">0x9e2c...f8a4 · 10:40 ص</div>
+            </div>
+            <div class="evidence-item editable" style="display:flex;align-items:center;justify-content:center;background:var(--bg);min-height:120px;border-style:dashed;" onclick="addEvidence()">
+                <span style="font-size:32px;color:var(--text-light);">+</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card mb-4">
+        <p class="font-semibold mb-3">⏱️ الجدول الزمني</p>
+        <div class="timeline" id="timeline">
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--danger);"></div>
+                <div>
+                    <p class="fw-600">تم فتح النزاع</p>
+                    <p class="text-sm text-muted">بواسطة Sara (مشتري) · 12 مايو 10:30 ص</p>
+                    <p class="text-sm">جودة العمل غير مطابقة للمواصفات المتفق عليها</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--primary);"></div>
+                <div>
+                    <p class="fw-600">تم إضافة الأدلة</p>
+                    <p class="text-sm text-muted">2 ملفات · 12 مايو 10:35 ص</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--warning);"></div>
+                <div>
+                    <p class="fw-600">في انتظار تعيين وسيط</p>
+                    <p class="text-sm text-muted">سيتم تعيين وسيط من فريق SafeSend</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Notes (visible only to admin/mediator) -->
+    <div class="admin-notes mb-4" id="adminNotes" style="display:none;">
+        <p class="text-sm">الأدلة المقدمة واضحة وتظهر اختلاف في جودة التسليم. يوصى بجلسة تحكيم سريعة.</p>
+        <p class="text-xs text-muted">أضيفت بواسطة: Admin · 12 مايو 2:00 م</p>
+    </div>
+
+    <!-- Verdict (shown after resolution) -->
+    <div class="timeline-verdict mb-4" id="verdictArea" style="display:none;">
+        <p class="font-bold text-lg">⚖️ القرار النهائي</p>
+        <p>تم تحويل 250 USDT للمشتري (Sara)</p>
+        <p>تم تحويل 250 USDT للبائع (Ali)</p>
+        <p class="text-sm text-muted mt-2">صدر بواسطة: وسيط SafeSend · 14 مايو 2024</p>
+    </div>
+
+    <!-- Appeal -->
+    <div class="appeal-banner mb-4" id="appealBanner" style="display:none;">
+        <p class="font-bold">📢 هل تريد استئناف القرار؟</p>
+        <p class="text-sm">لديك 7 أيام من تاريخ القرار لتقديم استئناف واحد</p>
+        <button class="btn btn-danger mt-3" onclick="fileAppeal()">تقديم استئناف</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="grid-2 mb-4">
+        <button class="btn btn-outline btn-block" onclick="openMessageMediator()">💬 مراسلة الوسيط</button>
+        <button class="btn btn-outline btn-block" onclick="exportDispute()">📤 تصدير PDF</button>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="evidenceInput" style="display:none;" multiple accept="image/*,.pdf,.doc,.docx" onchange="handleEvidenceUpload(event)">
+
+    <!-- ==================== Modals ==================== -->
+    <!-- Open Dispute Modal -->
+    <div class="modal-overlay" id="openDisputeModal" style="display:none;">
+        <div class="modal">
+            <h3>⚠️ فتح نزاع جديد</h3>
+            <p class="text-muted text-sm">صفقة: تصميم موقع احترافي · 500 USDT</p>
+            <select class="input mt-3"><option>اختر الفئة</option><option>جودة العمل غير مطابقة</option><option>تأخير في التسليم</option><option>مشكلة في التواصل</option><option>مشكلة في الدفع</option></select>
+            <textarea class="input textarea mt-3" placeholder="وصف المشكلة بالتفصيل (50 حرف على الأقل)..."></textarea>
+            <div style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:var(--space-4);text-align:center;margin-top:var(--space-3);cursor:pointer;" onclick="document.getElementById('evidenceInput').click()">📎 أضغط لرفع الأدلة (حتى 10 ملفات)</div>
+            <div class="grid-2 mt-3">
+                <button class="btn btn-danger btn-block" onclick="submitDispute()">فتح نزاع</button>
+                <button class="btn btn-outline btn-block" onclick="closeModal('openDisputeModal')">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<script src="/static/js/main.js"></script>
+<script>
+    // ==================== Evidence Management ====================
+    function addEvidence() {
+        document.getElementById('evidenceInput').click();
+    }
+
+    function handleEvidenceUpload(event) {
+        const files = event.target.files;
+        if (files.length > 10) {
+            alert('الحد الأقصى 10 ملفات');
+            return;
+        }
+        
+        const grid = document.getElementById('evidenceGrid');
+        Array.from(files).forEach((file, i) => {
+            const hash = '0x' + Math.random().toString(16).substring(2,6) + '...' + Math.random().toString(16).substring(2,6);
+            const item = document.createElement('div');
+            item.className = 'evidence-item editable';
+            item.innerHTML = `
+                <div style="height:100px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);font-size:28px;">📎</div>
+                <button class="delete-btn" onclick="this.parentElement.remove()">✕</button>
+                <div class="hash">${hash} · الآن</div>
+                <p class="text-xs text-center p-1">${file.name.substring(0,15)}</p>
+            `;
+            grid.insertBefore(item, grid.lastElementChild);
+        });
+        event.target.value = '';
+    }
+
+    function removeEvidence(index) {
+        if (confirm('هل أنت متأكد من حذف هذا الدليل؟ (متاح خلال 60 دقيقة فقط)')) {
+            const items = document.querySelectorAll('.evidence-item.editable');
+            if (items[index]) items[index].remove();
+        }
+    }
+
+    // ==================== Dispute Actions ====================
+    function openMessageMediator() {
+        alert('📝 سيتم فتح نافذة المراسلة مع الوسيط');
+    }
+
+    function exportDispute() {
+        alert('📤 جاري تصدير النزاع بصيغة PDF...\n\nمحتويات التصدير:\n- تفاصيل النزاع\n- الأدلة\n- الجدول الزمني\n- القرار (إن وجد)');
+    }
+
+    function fileAppeal() {
+        const reason = prompt('سبب الاستئناف:');
+        if (reason) {
+            alert('✅ تم تقديم الاستئناف بنجاح\n\nسيتم مراجعة الاستئناف خلال 48 ساعة');
+            document.getElementById('appealBanner').innerHTML = '<p class="font-bold">📢 تم تقديم الاستئناف</p><p class="text-sm">بانتظار المراجعة...</p>';
+        }
+    }
+
+    function submitDispute() {
+        alert('✅ تم فتح النزاع بنجاح\n\nرقم النزاع: #568\nتم تجميد المبلغ: 500 USDT\nسيتم تعيين وسيط خلال 24 ساعة');
+        closeModal('openDisputeModal');
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).style.display = 'none';
+    }
+
+    // ==================== Init ====================
+    // Show admin notes if admin
+    if (localStorage.getItem('safesend_role') === 'admin') {
+        document.getElementById('adminNotes').style.display = 'block';
+    }
+
+    // Simulate verdict after 10s for demo
+    setTimeout(() => {
+        document.getElementById('verdictArea').style.display = 'block';
+        document.getElementById('appealBanner').style.display = 'block';
+        document.querySelector('.badge-warning').textContent = 'تم الحل';
+        document.querySelector('.badge-warning').className = 'badge badge-success';
+    }, 10000);
+
+    // Keyboard: Ctrl+O to open dispute
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'o') {
+            e.preventDefault();
+            document.getElementById('openDisputeModal').style.display = 'flex';
+        }
+    });
+</script>
+
+</body>
+</html>

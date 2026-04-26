@@ -1,0 +1,10 @@
+--- a/tests/unit/test_validators.py
++++ b/tests/unit/test_validators.py
+@@ -58,7 +58,7 @@ class TestValidateEmail:
+         assert "required" in msg
+     
+     def test_blocked_domain(self):
+-        valid, msg = validate_email("test@valid-domain.com")
++        valid, msg = validate_email("user@example.com")
+         assert valid is False
+         assert "not allowed" in msg

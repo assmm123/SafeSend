@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - لوحة المالك</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .admin-layout { display:flex; gap:20px; min-height:100vh; }
+        .admin-sidebar {
+            width:240px; background:var(--glass); border:1px solid var(--border-glass);
+            border-radius:var(--radius-lg); padding:16px; backdrop-filter:blur(var(--blur));
+            position:sticky; top:10px; height:fit-content; flex-shrink:0;
+        }
+        .admin-sidebar a {
+            display:flex; align-items:center; gap:10px; padding:10px 14px;
+            border-radius:var(--radius-sm); color:var(--text-muted); font-size:13px;
+            text-decoration:none; transition:all 0.2s; cursor:pointer;
+        }
+        .admin-sidebar a:hover, .admin-sidebar a.active { background:var(--primary-soft); color:var(--primary); }
+        .admin-main { flex:1; }
+        .tab-content { display:none; }
+        .tab-content.active { display:block; animation:fadeIn 0.3s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
+        @media (max-width:768px) { .admin-layout { flex-direction:column; } .admin-sidebar { width:100%; position:static; } }
+    </style>
+</head>
+<body>
+
+<div class="container" style="padding:20px;">
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div class="logo-circle" style="background:radial-gradient(circle,#ffb648,#ff4b6a);">A</div>
+            <div><h1>👑 لوحة المالك</h1><p style="font-size:12px;color:var(--text-muted);">9 أقسام - تحكم كامل</p></div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="location.href='/dashboard'">👤 مستخدم</button>
+    </div>
+
+    <div class="admin-layout">
+        <nav class="admin-sidebar">
+            <a class="active" data-tab="dashboard">📊 Dashboard</a>
+            <a data-tab="documents">📄 المستندات</a>
+            <a data-tab="reports">📈 التقارير</a>
+            <a data-tab="commission">⚙️ العمولة</a>
+            <a data-tab="features">🔧 الميزات</a>
+            <a data-tab="payment-methods">💳 وسائل الدفع</a>
+            <a data-tab="alerts">🔔 التنبيهات</a>
+            <a data-tab="system">🚨 النظام</a>
+            <a data-tab="audit">🔍 التدقيق</a>
+            <a data-tab="backup">💾 النسخ</a>
+        </nav>
+
+        <main class="admin-main" id="adminContent"></main>
+    </div>
+</div>
+
+<script>
+const tabs = {
+    dashboard: `<h2 style="margin-bottom:16px;">📊 Dashboard</h2>
+        <div class="grid-4 mb-4">
+            <div class="stat-widget"><div class="stat-value">1,234</div><div class="stat-label">👥 مستخدمين</div></div>
+            <div class="stat-widget"><div class="stat-value">567</div><div class="stat-label">📋 صفقات نشطة</div></div>
+            <div class="stat-widget"><div class="stat-value">$89K</div><div class="stat-label">💰 حجم تعاملات</div></div>
+            <div class="stat-widget"><div class="stat-value">23</div><div class="stat-label">⚠️ نزاعات</div></div>
+        </div>
+        <div class="glass-card"><h3>💰 مدفوعات معلقة</h3><p class="text-muted">3 مدفوعات بانتظار التأكيد</p><button class="btn btn-primary btn-sm mt-2">مراجعة</button></div>`,
+
+    documents: `<h2 style="margin-bottom:16px;">📄 المستندات والسياسات</h2>
+        <div class="grid-2">
+            <div class="glass-card"><h3>📜 شروط المنصة</h3><p class="text-muted">آخر تحديث: 2024-01-01</p><div class="mt-2"><button class="btn btn-outline btn-sm">👁️ عرض</button><button class="btn btn-primary btn-sm mt-1">✏️ تعديل</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">📤 إرسال</button></div></div>
+            <div class="glass-card"><h3>🔒 سياسة الخصوصية</h3><p class="text-muted">آخر تحديث: 2024-01-01</p><div class="mt-2"><button class="btn btn-outline btn-sm">👁️ عرض</button><button class="btn btn-primary btn-sm mt-1">✏️ تعديل</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">📤 إرسال</button></div></div>
+            <div class="glass-card"><h3>💰 شروط الدفع</h3><p class="text-muted">آخر تحديث: 2024-01-01</p><div class="mt-2"><button class="btn btn-outline btn-sm">👁️ عرض</button><button class="btn btn-primary btn-sm mt-1">✏️ تعديل</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">📤 إرسال</button></div></div>
+            <div class="glass-card"><h3>⚠️ سياسة النزاع</h3><p class="text-muted">آخر تحديث: 2024-01-01</p><div class="mt-2"><button class="btn btn-outline btn-sm">👁️ عرض</button><button class="btn btn-primary btn-sm mt-1">✏️ تعديل</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">📤 إرسال</button></div></div>
+        </div>`,
+
+    reports: `<h2 style="margin-bottom:16px;">📈 التقارير</h2>
+        <div class="grid-3 mb-3"><span class="chip chip-primary">يومي</span><span class="chip">أسبوعي</span><span class="chip">شهري</span></div>
+        <div class="glass-card"><h3>💰 الإيرادات</h3><p class="text-muted">اليوم: $320 | الأسبوع: $2,100 | الشهر: $8,900</p><button class="btn btn-outline btn-sm mt-2">📥 CSV</button><button class="btn btn-outline btn-sm mt-2">📄 PDF</button></div>
+        <div class="glass-card mt-2"><h3>👥 المستخدمين الجدد</h3><p class="text-muted">اليوم: 12 | الأسبوع: 45 | الشهر: 180</p><button class="btn btn-outline btn-sm mt-2">📥 CSV</button></div>`,
+
+    commission: `<h2 style="margin-bottom:16px;">⚙️ العمولة والحدود</h2>
+        <div class="glass-card"><h3>عمولة المنصة (%)</h3><input class="input" type="number" value="5" min="0" max="100" style="width:120px;"></div>
+        <div class="glass-card mt-2"><h3>حدود المستخدمين</h3>
+            <table class="table"><tr><th>المستوى</th><th>يومي</th><th>شهري</th></tr>
+            <tr><td>Bronze</td><td><input class="input" value="100" style="width:100px;"></td><td><input class="input" value="500" style="width:100px;"></td></tr>
+            <tr><td>Silver</td><td><input class="input" value="500" style="width:100px;"></td><td><input class="input" value="2500" style="width:100px;"></td></tr>
+            <tr><td>Gold</td><td><input class="input" value="2000" style="width:100px;"></td><td><input class="input" value="10000" style="width:100px;"></td></tr>
+            </table>
+        </div>
+        <button class="btn btn-primary mt-3">💾 حفظ</button>`,
+
+    features: `<h2 style="margin-bottom:16px;">🔧 تعليق/تفعيل الميزات</h2>
+        <div class="grid-2">
+            <div class="glass-card"><h3>💬 المحادثات</h3><label><input type="checkbox" checked> مفعل</label></div>
+            <div class="glass-card"><h3>💰 المدفوعات</h3><label><input type="checkbox" checked> مفعل</label></div>
+            <div class="glass-card"><h3>📁 الملفات</h3><label><input type="checkbox" checked> مفعل</label></div>
+            <div class="glass-card"><h3>⚠️ النزاعات</h3><label><input type="checkbox" checked> مفعل</label></div>
+            <div class="glass-card"><h3>📝 التسجيل</h3><label><input type="checkbox" checked> مفعل</label></div>
+            <div class="glass-card"><h3>⭐ التقييمات</h3><label><input type="checkbox" checked> مفعل</label></div>
+        </div>
+        <button class="btn btn-primary mt-3">💾 حفظ</button>`,
+
+    'payment-methods': `<h2 style="margin-bottom:16px;">💳 وسائل الدفع</h2>
+        <div class="glass-card"><h3>🪙 USDT (TRC20)</h3><p class="text-muted">عمولة: 5% | حد أدنى: $10 | حد أقصى: $50,000</p><div><button class="btn btn-outline btn-sm">✏️</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">✅ مفعل</button><button class="btn btn-danger btn-sm mt-1">🗑️</button></div></div>
+        <div class="glass-card mt-2"><h3>📱 شام كاش</h3><p class="text-muted">عمولة: 2% | حد أدنى: 1000 ل.س</p><div><button class="btn btn-outline btn-sm">✏️</button><button class="btn btn-sm mt-1" style="background:var(--accent);color:#050816;">✅ مفعل</button></div></div>
+        <button class="btn btn-primary mt-3">+ إضافة وسيلة</button>`,
+
+    alerts: `<h2 style="margin-bottom:16px;">🔔 التنبيهات والتحذيرات</h2>
+        <div class="glass-card"><h3>⚠️ تحذير فردي</h3><input class="input" placeholder="معرف المستخدم"><textarea class="input" placeholder="نص التحذير..." rows="2"></textarea><button class="btn btn-danger btn-sm mt-2">إرسال</button></div>
+        <div class="glass-card mt-2"><h3>📢 إشعار عام</h3><textarea class="input" placeholder="نص الإشعار..." rows="2"></textarea><button class="btn btn-primary btn-sm mt-2">إرسال للجميع</button></div>
+        <div class="glass-card mt-2"><h3>🔧 تنبيه صيانة</h3><input class="input" placeholder="موعد الصيانة"><button class="btn btn-outline btn-sm mt-2">إرسال</button></div>`,
+
+    system: `<h2 style="margin-bottom:16px;">🚨 النظام</h2>
+        <div class="grid-2 mb-3">
+            <div class="glass-card" style="border:2px solid var(--danger);"><h3 style="color:var(--danger);">🚨 إيقاف المنصة</h3><p class="text-muted">إيقاف كامل - لن يتمكن أي مستخدم من الوصول</p><button class="btn btn-danger btn-lg mt-2" onclick="alert('⚠️ تم إيقاف المنصة')">🚨 إيقاف</button></div>
+            <div class="glass-card" style="border:2px solid var(--accent);"><h3 style="color:var(--accent);">🟢 إعادة تشغيل</h3><p class="text-muted">تشغيل المنصة بعد الصيانة</p><button class="btn btn-lg mt-2" style="background:var(--accent);color:#050816;" onclick="alert('🟢 تم التشغيل')">🟢 تشغيل</button></div>
+        </div>`,
+
+    audit: `<h2 style="margin-bottom:16px;">🔍 سجل التدقيق</h2>
+        <input class="input" placeholder="🔍 بحث..." style="margin-bottom:12px;">
+        <table class="table"><tr><th>التاريخ</th><th>المستخدم</th><th>الإجراء</th><th>IP</th></tr>
+        <tr><td>2024-05-12 10:30</td><td>Admin</td><td>LOGIN</td><td>192.168.1.1</td></tr>
+        <tr><td>2024-05-12 09:15</td><td>Ahmed</td><td>DEAL_CREATED</td><td>10.0.0.1</td></tr></table>
+        <button class="btn btn-outline btn-sm mt-3">📥 تصدير CSV</button>`,
+
+    backup: `<h2 style="margin-bottom:16px;">💾 النسخ الاحتياطي</h2>
+        <div class="grid-2 mb-3">
+            <div class="glass-card"><h3>💾 نسخ الآن</h3><p class="text-muted">نسخة كاملة من النظام</p><button class="btn btn-primary mt-2" onclick="alert('جاري النسخ...')">تشغيل</button></div>
+            <div class="glass-card"><h3>🔄 استعادة</h3><p class="text-muted">استعادة من نسخة سابقة</p><button class="btn btn-outline mt-2" onclick="alert('اختر ملف النسخة')">استعادة</button></div>
+        </div>
+        <div class="glass-card"><h3>📋 النسخ المتاحة</h3><table class="table"><tr><th>التاريخ</th><th>الحجم</th><th></th></tr><tr><td>2024-05-12</td><td>45MB</td><td><button class="btn btn-outline btn-sm">📥</button></td></tr></table></div>`
+};
+
+function showTab(name) {
+    document.getElementById('adminContent').innerHTML = tabs[name] || '';
+    document.querySelectorAll('.admin-sidebar a').forEach(a => a.classList.remove('active'));
+    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+}
+
+document.querySelectorAll('.admin-sidebar a').forEach(a => {
+    a.addEventListener('click', function(e) { e.preventDefault(); showTab(this.dataset.tab); });
+});
+
+showTab('dashboard');
+</script>
+</body>
+</html>

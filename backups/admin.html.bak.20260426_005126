@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - لوحة تحكم المالك</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --sidebar-width: 240px;
+            --header-height: 56px;
+            --admin-primary: #1e293b;
+        }
+        [data-theme="dark"] { --admin-primary: #0d1117; }
+        .admin-layout { display:flex; height:100vh; }
+        .admin-sidebar {
+            width:var(--sidebar-width); background:var(--admin-primary); color:white;
+            display:flex; flex-direction:column; flex-shrink:0; overflow-y:auto;
+        }
+        .admin-sidebar .logo { padding:var(--space-4); text-align:center; border-bottom:1px solid rgba(255,255,255,0.1); font-weight:800; font-size:18px; }
+        .admin-sidebar .nav { flex:1; padding:var(--space-2) 0; }
+        .admin-sidebar .nav a {
+            display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4);
+            color:rgba(255,255,255,0.75); font-size:14px; transition:all 0.2s; cursor:pointer; text-decoration:none;
+        }
+        .admin-sidebar .nav a:hover, .admin-sidebar .nav a.active { background:rgba(255,255,255,0.1); color:white; }
+        .admin-main { flex:1; overflow-y:auto; background:var(--bg); }
+        .admin-header {
+            background:var(--surface); border-bottom:1px solid var(--border);
+            padding:var(--space-2) var(--space-4); display:flex; align-items:center; justify-content:space-between;
+            height:var(--header-height); position:sticky; top:0; z-index:10;
+        }
+        .admin-content { padding:var(--space-6); }
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+        .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--space-4); margin-bottom:var(--space-4); }
+        .chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4); margin-bottom:var(--space-4); }
+        .data-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .data-table th { background:var(--bg-secondary); padding:var(--space-2) var(--space-3); text-align:right; font-weight:600; border-bottom:2px solid var(--border); }
+        .data-table td { padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--border-light); }
+        .data-table tr:hover { background:var(--surface-hover); }
+        .data-table .actions { display:flex; gap:var(--space-1); }
+        .bulk-bar { background:var(--primary-bg); padding:var(--space-2) var(--space-4); border-radius:var(--radius-sm); display:none; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); }
+        .bulk-bar.show { display:flex; }
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:100; }
+        .modal { background:var(--surface); border-radius:var(--radius-lg); padding:var(--space-6); max-width:600px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:var(--shadow-xl); }
+        @media (max-width:768px) { .admin-sidebar { display:none; } .stat-grid { grid-template-columns:1fr 1fr; } .chart-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="admin-layout">
+    <!-- ==================== Sidebar ==================== -->
+    <aside class="admin-sidebar">
+        <div class="logo">👑 SafeSend Admin</div>
+        <nav class="nav">
+            <a class="active" data-tab="dashboard">📊 Dashboard</a>
+            <a data-tab="users">👥 المستخدمين</a>
+            <a data-tab="deals">📋 الصفقات</a>
+            <a data-tab="payouts">💰 المدفوعات</a>
+            <a data-tab="disputes">⚠️ النزاعات</a>
+            <a data-tab="documents">📄 المستندات</a>
+            <a data-tab="reports">📈 التقارير</a>
+            <a data-tab="alerts">🔔 التنبيهات</a>
+            <a data-tab="settings">⚙️ الإعدادات</a>
+            <a data-tab="system">⚙️ النظام</a>
+            <a data-tab="audit">🔍 سجل التدقيق</a>
+        </nav>
+    </aside>
+
+    <!-- ==================== Main ==================== -->
+    <main class="admin-main">
+        <div class="admin-header">
+            <span class="font-bold">👑 لوحة تحكم المالك</span>
+            <div style="display:flex;gap:var(--space-3);align-items:center;">
+                <span class="connection-status connected"><span class="status-dot status-dot-green"></span> متصل</span>
+                <button class="btn btn-ghost btn-icon" data-toggle-theme>🌓</button>
+                <button class="btn btn-danger btn-sm" onclick="stopSystem()">🚨 إيقاف</button>
+                <button class="btn btn-ghost btn-icon" onclick="logout()">🚪</button>
+            </div>
+        </div>
+
+        <div class="admin-content" id="adminContent">
+            <!-- سيتم توليد المحتوى ديناميكياً -->
+        </div>
+    </main>
+</div>
+
+<!-- Modals Container -->
+<div id="modalContainer"></div>
+
+<script src="/static/js/main.js"></script>
+<script>
+// ==================== Navigation ====================
+document.querySelectorAll('.admin-sidebar .nav a').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.admin-sidebar .nav a').forEach(l => l.classList.remove('active'));
+        this.classList.add('active');
+        renderTab(this.dataset.tab);
+    });
+});
+
+// ==================== State ====================
+const state = {
+    users: [
+        { id:1, name:'Ahmed', email:'ahmed@email.com', status:'نشط', kyc:true, balance:500, deals:25, rating:4.8, joined:'2024-01-15' },
+        { id:2, name:'Sara', email:'sara@email.com', status:'نشط', kyc:true, balance:1200, deals:18, rating:4.5, joined:'2024-02-20' },
+        { id:3, name:'Ali', email:'ali@email.com', status:'موقوف', kyc:false, balance:0, deals:5, rating:3.2, joined:'2024-03-10' },
+    ],
+    deals: [
+        { id:1, title:'تصميم موقع', seller:'Ahmed', buyer:'Mona', amount:500, status:'نشطة', created:'2024-05-01' },
+        { id:2, title:'ترجمة مستندات', seller:'Sara', buyer:'Ali', amount:200, status:'مكتملة', created:'2024-04-28' },
+        { id:3, title:'استشارة', seller:'Ali', buyer:'Ahmed', amount:50, status:'نزاع', created:'2024-05-05' },
+    ],
+    payouts: [
+        { id:1, deal:'تصميم موقع', to:'Ahmed', amount:475, status:'معلق', created:'2024-05-12' },
+        { id:2, deal:'ترجمة مستندات', to:'Sara', amount:190, status:'مكتمل', created:'2024-05-10' },
+    ],
+    disputes: [
+        { id:1, deal:'استشارة', from:'Ali', against:'Ahmed', reason:'جودة غير مطابقة', status:'قيد المراجعة', created:'2024-05-05' },
+    ],
+    documents: {
+        terms: { title:'شروط المنصة', updated:'2024-01-01', content:'...' },
+        privacy: { title:'سياسة الخصوصية', updated:'2024-01-01', content:'...' },
+        payment: { title:'شروط الدفع والتعامل', updated:'2024-01-01', content:'...' },
+        dispute: { title:'سياسة النزاع والتحكيم', updated:'2024-01-01', content:'...' },
+        community: { title:'معايير المجتمع', updated:'2024-01-01', content:'...' },
+        refund: { title:'سياسة الاسترجاع', updated:'2024-01-01', content:'...' },
+    },
+    paymentMethods: [
+        { id:1, name:'USDT (TRC20)', fee:5, min:10, max:50000, active:true },
+        { id:2, name:'شام كاش', fee:2, min:1000, max:5000000, active:true },
+        { id:3, name:'Binance Pay', fee:0.5, min:10, max:50000, active:true },
+    ],
+    alerts: [],
+    selectedUsers: new Set(),
+    selectedDeals: new Set(),
+    selectedPayouts: new Set(),
+};
+
+// ==================== Tab Rendering ====================
+function renderTab(tab) {
+    const container = document.getElementById('adminContent');
+    switch(tab) {
+        case 'dashboard': container.innerHTML = renderDashboard(); initCharts(); break;
+        case 'users': container.innerHTML = renderUsers(); break;
+        case 'deals': container.innerHTML = renderDeals(); break;
+        case 'payouts': container.innerHTML = renderPayouts(); break;
+        case 'disputes': container.innerHTML = renderDisputes(); break;
+        case 'documents': container.innerHTML = renderDocuments(); break;
+        case 'reports': container.innerHTML = renderReports(); break;
+        case 'alerts': container.innerHTML = renderAlerts(); break;
+        case 'settings': container.innerHTML = renderSettings(); break;
+        case 'system': container.innerHTML = renderSystem(); break;
+        case 'audit': container.innerHTML = renderAudit(); break;
+    }
+}
+
+// ==================== Dashboard ====================
+function renderDashboard() {
+    return `
+        <div class="stat-grid">
+            <div class="stat-card"><div class="stat-number">1,234</div><div class="stat-label">👥 مستخدم</div></div>
+            <div class="stat-card"><div class="stat-number">567</div><div class="stat-label">📋 صفقات نشطة</div></div>
+            <div class="stat-card"><div class="stat-number">$89K</div><div class="stat-label">💰 حجم التعاملات</div></div>
+            <div class="stat-card"><div class="stat-number">23</div><div class="stat-label">⚠️ نزاعات مفتوحة</div></div>
+        </div>
+        <div class="chart-grid">
+            <div class="card"><p class="font-semibold mb-3">📊 الإيرادات الشهرية</p><canvas id="revenueChart" height="200"></canvas></div>
+            <div class="card"><p class="font-semibold mb-3">👥 نمو المستخدمين</p><canvas id="usersChart" height="200"></canvas></div>
+            <div class="card"><p class="font-semibold mb-3">📋 توزيع الصفقات</p><canvas id="dealsChart" height="200"></canvas></div>
+            <div class="card"><p class="font-semibold mb-3">⚠️ النزاعات</p><canvas id="disputesChart" height="200"></canvas></div>
+        </div>
+        <div class="card">
+            <p class="font-semibold mb-3">🚨 تنبيهات عاجلة</p>
+            <div class="grid-2">
+                <div class="card card-flat" style="border-right:4px solid var(--warning);"><p class="fw-600">3 مدفوعات معلقة</p><p class="text-sm text-muted">تحتاج تأكيد</p></div>
+                <div class="card card-flat" style="border-right:4px solid var(--danger);"><p class="fw-600">2 نزاعات جديدة</p><p class="text-sm text-muted">تحتاج مراجعة</p></div>
+            </div>
+        </div>`;
+}
+
+function initCharts() {
+    setTimeout(() => {
+        const charts = [
+            { id:'revenueChart', type:'line', data:[120,250,180,300,450,320,500], labels:['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو'], color:'#1a73e8' },
+            { id:'usersChart', type:'bar', data:[50,120,200,350,500,800,1234], labels:['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو'], color:'#0d904f' },
+            { id:'dealsChart', type:'doughnut', data:[30,45,25,200,5], labels:['معلقة','نشطة','ممولة','مكتملة','نزاع'], color:null },
+            { id:'disputesChart', type:'pie', data:[15,5,3], labels:['محلولة','قيد المراجعة','مستأنفة'], color:null },
+        ];
+        charts.forEach(c => {
+            const ctx = document.getElementById(c.id);
+            if (!ctx) return;
+            new Chart(ctx.getContext('2d'), {
+                type: c.type,
+                data: {
+                    labels: c.labels,
+                    datasets: [{ data:c.data, backgroundColor:c.color ? c.color+'33' : ['#f5a623','#1a73e8','#0d904f','#64748b','#d93025'], borderColor:c.color || '#1a73e8', fill:c.type==='line', tension:0.4 }]
+                },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:c.type!=='line'&&c.type!=='bar', position:'bottom' } } }
+            });
+        });
+    }, 100);
+}
+
+// ==================== Users ====================
+function renderUsers() {
+    return `
+        <div class="card mb-4">
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;">
+                <input class="input" placeholder="🔍 بحث..." style="flex:1;min-width:200px;" oninput="filterTable('usersTable', this.value)">
+                <select class="input" style="width:150px;" onchange="filterTable('usersTable', this.value)"><option value="">الكل</option><option>نشط</option><option>موقوف</option></select>
+                <button class="btn btn-primary" onclick="showModal('addUserModal')">+ مستخدم</button>
+            </div>
+        </div>
+        <div class="bulk-bar" id="userBulkBar">
+            <span id="userBulkCount">0 محدد</span>
+            <button class="btn btn-danger btn-sm" onclick="bulkAction('suspend')">تعليق</button>
+            <button class="btn btn-warning btn-sm" onclick="bulkAction('warn')">⚠️ تحذير</button>
+            <button class="btn btn-outline btn-sm" onclick="bulkAction('export')">📤 تصدير</button>
+        </div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table" id="usersTable">
+                <thead><tr>
+                    <th><input type="checkbox" onchange="toggleAll('users', this)"></th>
+                    <th>الاسم</th><th>البريد</th><th>الحالة</th><th>KYC</th><th>الرصيد</th><th>الصفقات</th><th>التقييم</th><th>التاريخ</th><th>إجراءات</th>
+                </tr></thead>
+                <tbody>
+                    ${state.users.map(u => `<tr>
+                        <td><input type="checkbox" value="${u.id}" onchange="toggleSelect('users', ${u.id}, this)"></td>
+                        <td class="fw-600">${u.name}</td><td>${u.email}</td>
+                        <td><span class="badge ${u.status==='نشط'?'badge-success':'badge-danger'}">${u.status}</span></td>
+                        <td>${u.kyc ? '✅' : '❌'}</td><td>$${u.balance}</td><td>${u.deals}</td>
+                        <td>⭐${u.rating}</td><td>${u.joined}</td>
+                        <td class="actions">
+                            <button class="btn btn-sm btn-outline" onclick="viewUser(${u.id})">👁️</button>
+                            <button class="btn btn-sm btn-danger" onclick="suspendUser(${u.id})">⏸️</button>
+                            <button class="btn btn-sm btn-warning" onclick="warnUser(${u.id})">⚠️</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Deals ====================
+function renderDeals() {
+    return `
+        <div class="card mb-4">
+            <div style="display:flex;gap:var(--space-3);">
+                <input class="input" placeholder="🔍 بحث..." style="flex:1;" oninput="filterTable('dealsTable', this.value)">
+                <select class="input" style="width:150px;"><option>الكل</option><option>نشطة</option><option>مكتملة</option><option>نزاع</option></select>
+            </div>
+        </div>
+        <div class="bulk-bar" id="dealBulkBar">
+            <span id="dealBulkCount">0 محدد</span>
+            <button class="btn btn-danger btn-sm" onclick="bulkDealAction('cancel')">إلغاء</button>
+            <button class="btn btn-outline btn-sm" onclick="bulkDealAction('export')">📤 تصدير</button>
+        </div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table" id="dealsTable">
+                <thead><tr><th><input type="checkbox" onchange="toggleAll('deals', this)"></th><th>العنوان</th><th>البائع</th><th>المشتري</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+                <tbody>
+                    ${state.deals.map(d => `<tr>
+                        <td><input type="checkbox" value="${d.id}" onchange="toggleSelect('deals', ${d.id}, this)"></td>
+                        <td class="fw-600">${d.title}</td><td>${d.seller}</td><td>${d.buyer}</td><td>$${d.amount}</td>
+                        <td><span class="badge ${d.status==='نشطة'?'badge-info':d.status==='مكتملة'?'badge-success':'badge-danger'}">${d.status}</span></td>
+                        <td>${d.created}</td>
+                        <td class="actions">
+                            <button class="btn btn-sm btn-outline">👁️</button>
+                            <button class="btn btn-sm btn-danger" onclick="freezeDeal(${d.id})">🧊 تجميد</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Payouts ====================
+function renderPayouts() {
+    return `
+        <div class="card mb-4">
+            <h3>💰 إدارة المدفوعات ووسائل الدفع</h3>
+        </div>
+        <div class="card mb-4">
+            <p class="font-semibold mb-3">وسائل الدفع</p>
+            <table class="data-table" id="methodsTable">
+                <thead><tr><th>الوسيلة</th><th>العمولة %</th><th>الحد الأدنى</th><th>الحد الأقصى</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+                <tbody>
+                    ${state.paymentMethods.map(m => `<tr>
+                        <td class="fw-600">${m.name}</td><td>${m.fee}%</td><td>$${m.min}</td><td>$${m.max}</td>
+                        <td><span class="badge ${m.active?'badge-success':'badge-danger'}">${m.active?'مفعل':'معطل'}</span></td>
+                        <td class="actions">
+                            <button class="btn btn-sm btn-outline" onclick="editMethod(${m.id})">✏️</button>
+                            <button class="btn btn-sm ${m.active?'btn-danger':'btn-success'}" onclick="toggleMethod(${m.id})">${m.active?'تعطيل':'تفعيل'}</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteMethod(${m.id})">🗑️</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+            <button class="btn btn-primary mt-3" onclick="addMethod()">+ إضافة وسيلة دفع</button>
+        </div>
+        <p class="font-semibold mb-3">المدفوعات المعلقة</p>
+        <div class="bulk-bar" id="payoutBulkBar">
+            <span id="payoutBulkCount">0 محدد</span>
+            <button class="btn btn-success btn-sm" onclick="bulkPayoutAction('confirm')">✅ تأكيد الكل</button>
+            <button class="btn btn-danger btn-sm" onclick="bulkPayoutAction('reject')">❌ رفض الكل</button>
+        </div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table" id="payoutsTable">
+                <thead><tr><th><input type="checkbox" onchange="toggleAll('payouts', this)"></th><th>الصفقة</th><th>إلى</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+                <tbody>
+                    ${state.payouts.map(p => `<tr>
+                        <td><input type="checkbox" value="${p.id}" onchange="toggleSelect('payouts', ${p.id}, this)"></td>
+                        <td class="fw-600">${p.deal}</td><td>${p.to}</td><td>$${p.amount}</td>
+                        <td><span class="badge ${p.status==='مكتمل'?'badge-success':'badge-warning'}">${p.status}</span></td><td>${p.created}</td>
+                        <td class="actions">
+                            <button class="btn btn-sm btn-success" onclick="confirmPayout(${p.id})">✅</button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectPayout(${p.id})">❌</button>
+                            <button class="btn btn-sm btn-outline" onclick="retryPayout(${p.id})">🔄</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Disputes ====================
+function renderDisputes() {
+    return `
+        <div class="card mb-4"><h3>⚠️ إدارة النزاعات</h3></div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table">
+                <thead><tr><th>#</th><th>الصفقة</th><th>من</th><th>ضد</th><th>السبب</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+                <tbody>
+                    ${state.disputes.map(d => `<tr>
+                        <td>${d.id}</td><td>${d.deal}</td><td>${d.from}</td><td>${d.against}</td><td>${d.reason}</td>
+                        <td><span class="badge badge-warning">${d.status}</span></td>
+                        <td class="actions">
+                            <button class="btn btn-sm btn-primary" onclick="assignMediator(${d.id})">👤 وسيط</button>
+                            <button class="btn btn-sm btn-outline" onclick="viewEvidence(${d.id})">📸 أدلة</button>
+                            <button class="btn btn-sm btn-warning" onclick="freezeFunds(${d.id})">🧊 تجميد</button>
+                            <button class="btn btn-sm btn-success" onclick="resolveDispute(${d.id})">✅ حل</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Documents ====================
+function renderDocuments() {
+    return `
+        <div class="card mb-4"><h3>📄 المستندات والسياسات</h3></div>
+        ${Object.entries(state.documents).map(([key, doc]) => `
+            <div class="card mb-3">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div><p class="fw-600">${doc.title}</p><p class="text-sm text-muted">آخر تحديث: ${doc.updated}</p></div>
+                    <div class="actions">
+                        <button class="btn btn-sm btn-outline" onclick="editDocument('${key}')">✏️ تعديل</button>
+                        <button class="btn btn-sm btn-outline" onclick="viewDocument('${key}')">👁️ عرض</button>
+                        <button class="btn btn-sm btn-primary" onclick="sendDocument('${key}')">📤 إرسال للمستخدمين</button>
+                    </div>
+                </div>
+            </div>
+        `).join('')}
+        <button class="btn btn-primary" onclick="addDocument()">+ إضافة مستند جديد</button>`;
+}
+
+// ==================== Reports ====================
+function renderReports() {
+    const periods = ['يومي','أسبوعي','شهري','سنوي'];
+    const reports = ['الإيرادات','المستخدمين الجدد','الصفقات','العمولات','النزاعات','ملخص شامل'];
+    return `
+        <div class="card mb-4"><h3>📈 التقارير</h3></div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table">
+                <thead><tr><th>التقرير</th>${periods.map(p => `<th>${p}</th>`).join('')}<th>تصدير</th></tr></thead>
+                <tbody>
+                    ${reports.map(r => `<tr>
+                        <td class="fw-600">${r}</td>
+                        ${periods.map(() => `<td><button class="btn btn-sm btn-outline">👁️ عرض</button></td>`).join('')}
+                        <td><button class="btn btn-sm btn-primary">📥 CSV</button> <button class="btn btn-sm btn-outline">📄 PDF</button></td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Alerts ====================
+function renderAlerts() {
+    return `
+        <div class="card mb-4"><h3>🔔 التنبيهات والتحذيرات</h3></div>
+        <div class="card mb-4">
+            <p class="fw-600 mb-3">إرسال تحذير</p>
+            <select class="input" id="alertType"><option value="single">تحذير فردي</option><option value="bulk">تحذير جماعي</option><option value="all">إشعار عام</option></select>
+            <input class="input mt-3" id="alertTarget" placeholder="معرف المستخدم (للفردي)">
+            <textarea class="input textarea mt-3" id="alertMessage" placeholder="نص التحذير..."></textarea>
+            <button class="btn btn-danger mt-3" onclick="sendAlert()">⚠️ إرسال تحذير</button>
+        </div>
+        <div class="card mb-4">
+            <p class="fw-600 mb-3">تنبيهات النظام</p>
+            <button class="btn btn-outline mb-3" onclick="sendSystemAlert('update')">📢 تنبيه تحديث</button>
+            <button class="btn btn-warning mb-3" onclick="sendSystemAlert('maintenance')">🔧 تنبيه صيانة</button>
+            <button class="btn btn-danger" onclick="sendSystemAlert('stop')">🚨 تنبيه توقف</button>
+        </div>`;
+}
+
+// ==================== Settings ====================
+function renderSettings() {
+    return `
+        <div class="card mb-4"><h3>⚙️ الإعدادات العامة</h3></div>
+        <div class="card mb-3">
+            <p class="fw-600">عمولة المنصة العامة (%)</p>
+            <input class="input" type="number" value="5" min="0" max="100" style="width:150px;">
+        </div>
+        <div class="card mb-3">
+            <p class="fw-600">حدود المستخدمين (حسب المستوى)</p>
+            <table class="data-table">
+                <thead><tr><th>المستوى</th><th>الحد الأدنى</th><th>الحد الأقصى</th></tr></thead>
+                <tbody>
+                    <tr><td>عادي</td><td><input class="input" value="10" style="width:100px;"></td><td><input class="input" value="1000" style="width:100px;"></td></tr>
+                    <tr><td>موثوق</td><td><input class="input" value="50" style="width:100px;"></td><td><input class="input" value="5000" style="width:100px;"></td></tr>
+                    <tr><td>خبير</td><td><input class="input" value="100" style="width:100px;"></td><td><input class="input" value="50000" style="width:100px;"></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card mb-3">
+            <p class="fw-600 mb-3">تعليق/تفعيل الميزات</p>
+            <div class="grid-2">
+                <label class="checkbox"><input type="checkbox" checked> المحادثات</label>
+                <label class="checkbox"><input type="checkbox" checked> المدفوعات</label>
+                <label class="checkbox"><input type="checkbox" checked> الملفات</label>
+                <label class="checkbox"><input type="checkbox" checked> النزاعات</label>
+                <label class="checkbox"><input type="checkbox" checked> التسجيل</label>
+                <label class="checkbox"><input type="checkbox" checked> التقييمات</label>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()">💾 حفظ الإعدادات</button>`;
+}
+
+// ==================== System ====================
+function renderSystem() {
+    return `
+        <div class="card mb-4"><h3>⚙️ النظام والصيانة</h3></div>
+        <div class="grid-2 mb-4">
+            <div class="card"><p class="fw-600">💾 نسخ احتياطي</p><button class="btn btn-primary mt-2" onclick="backupNow()">تشغيل الآن</button></div>
+            <div class="card"><p class="fw-600">🔄 استعادة نسخة</p><button class="btn btn-warning mt-2" onclick="restoreBackup()">استعادة</button></div>
+            <div class="card"><p class="fw-600">🗑️ تنظيف بيانات</p><button class="btn btn-danger mt-2" onclick="cleanupData()">تنظيف</button></div>
+            <div class="card"><p class="fw-600">🔧 إعادة بناء فهارس</p><button class="btn btn-outline mt-2" onclick="rebuildIndexes()">بناء</button></div>
+        </div>
+        <div class="card mb-4">
+            <p class="fw-600">🏥 Health Check</p>
+            <table class="data-table mt-3">
+                <tr><td>قاعدة البيانات</td><td><span class="badge badge-success">✅ صحيحة</span></td></tr>
+                <tr><td>Redis</td><td><span class="badge badge-success">✅ صحيح</span></td></tr>
+                <tr><td>Celery</td><td><span class="badge badge-success">✅ عاملان</span></td></tr>
+                <tr><td>TronGrid</td><td><span class="badge badge-warning">⚠️ بطيء</span></td></tr>
+            </table>
+        </div>
+        <div class="card" style="border:2px solid var(--danger);">
+            <p class="fw-600" style="color:var(--danger);">🚨 منطقة الخطر</p>
+            <p class="text-sm text-muted mb-3">إيقاف المنصة بالكامل - لن يتمكن أي مستخدم من الوصول</p>
+            <button class="btn btn-danger btn-lg" onclick="stopSystem()">🚨 إيقاف المنصة</button>
+            <button class="btn btn-success btn-lg mt-2" onclick="startSystem()">🟢 إعادة تشغيل</button>
+        </div>`;
+}
+
+// ==================== Audit ====================
+function renderAudit() {
+    return `
+        <div class="card mb-4"><h3>🔍 سجل التدقيق</h3></div>
+        <div class="card mb-4">
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;">
+                <input class="input" placeholder="🔍 بحث..." style="flex:1;min-width:200px;">
+                <input class="input" type="date" style="width:160px;">
+                <button class="btn btn-outline">📥 تصدير CSV</button>
+            </div>
+        </div>
+        <div class="card" style="overflow-x:auto;">
+            <table class="data-table">
+                <thead><tr><th>التاريخ</th><th>المستخدم</th><th>الإجراء</th><th>الكيان</th><th>IP</th><th>تفاصيل</th></tr></thead>
+                <tbody>
+                    <tr><td>2024-05-12 10:30</td><td>Admin</td><td>OWNER_LOGIN</td><td>system</td><td>192.168.1.1</td><td><button class="btn btn-sm btn-outline">👁️</button></td></tr>
+                    <tr><td>2024-05-12 09:15</td><td>Ahmed</td><td>DEAL_CREATED</td><td>deal</td><td>10.0.0.1</td><td><button class="btn btn-sm btn-outline">👁️</button></td></tr>
+                    <tr><td>2024-05-12 08:00</td><td>Sara</td><td>PAYMENT_SENT</td><td>payment</td><td>172.16.0.1</td><td><button class="btn btn-sm btn-outline">👁️</button></td></tr>
+                </tbody>
+            </table>
+        </div>`;
+}
+
+// ==================== Actions ====================
+function toggleAll(type, checkbox) {
+    const table = document.getElementById(type + 'Table');
+    if (!table) return;
+    table.querySelectorAll('tbody input[type="checkbox"]').forEach(cb => {
+        cb.checked = checkbox.checked;
+        toggleSelect(type, parseInt(cb.value), cb);
+    });
+}
+
+function toggleSelect(type, id, checkbox) {
+    const set = state['selected' + type.charAt(0).toUpperCase() + type.slice(1)];
+    if (checkbox.checked) set.add(id); else set.delete(id);
+    updateBulkBar(type);
+}
+
+function updateBulkBar(type) {
+    const set = state['selected' + type.charAt(0).toUpperCase() + type.slice(1)];
+    const bar = document.getElementById(type + 'BulkBar');
+    const count = document.getElementById(type + 'BulkCount');
+    if (!bar || !count) return;
+    count.textContent = set.size + ' محدد';
+    bar.classList.toggle('show', set.size > 0);
+}
+
+function bulkAction(action) {
+    alert(`تم ${action} للمستخدمين المحددين (${state.selectedUsers.size})`);
+    state.selectedUsers.clear();
+    updateBulkBar('user');
+}
+
+function bulkDealAction(action) { alert(`تم ${action} للصفقات المحددة (${state.selectedDeals.size})`); }
+function bulkPayoutAction(action) { alert(`تم ${action} للمدفوعات المحددة (${state.selectedPayouts.size})`); }
+
+function suspendUser(id) { alert(`تم تعليق المستخدم #${id}`); }
+function warnUser(id) { const msg = prompt('نص التحذير:'); if(msg) alert(`تم إرسال تحذير للمستخدم #${id}`); }
+function viewUser(id) { alert(`عرض تفاصيل المستخدم #${id}`); }
+function freezeDeal(id) { alert(`تم تجميد الصفقة #${id}`); }
+function confirmPayout(id) { state.payouts.find(p=>p.id===id).status='مكتمل'; renderTab('payouts'); }
+function rejectPayout(id) { alert(`تم رفض الدفعة #${id}`); }
+function retryPayout(id) { alert(`إعادة محاولة الدفعة #${id}`); }
+function assignMediator(id) { alert(`تعيين وسيط للنزاع #${id}`); }
+function viewEvidence(id) { alert(`عرض أدلة النزاع #${id}`); }
+function freezeFunds(id) { alert(`تم تجميد أموال النزاع #${id}`); }
+function resolveDispute(id) { alert(`حل النزاع #${id}`); }
+
+function editMethod(id) { alert(`تعديل وسيلة الدفع #${id}`); }
+function toggleMethod(id) { const m = state.paymentMethods.find(p=>p.id===id); m.active=!m.active; renderTab('payouts'); }
+function deleteMethod(id) { state.paymentMethods = state.paymentMethods.filter(p=>p.id!==id); renderTab('payouts'); }
+function addMethod() { alert('إضافة وسيلة دفع جديدة'); }
+
+function editDocument(key) { alert(`تعديل: ${state.documents[key].title}`); }
+function viewDocument(key) { alert(`عرض: ${state.documents[key].title}`); }
+function sendDocument(key) { alert(`إرسال ${state.documents[key].title} لجميع المستخدمين`); }
+function addDocument() { alert('إضافة مستند جديد'); }
+
+function sendAlert() { alert('تم إرسال التحذير'); }
+function sendSystemAlert(type) { alert(`تم إرسال تنبيه ${type}`); }
+function saveSettings() { alert('تم حفظ الإعدادات'); }
+
+function backupNow() { alert('جاري النسخ الاحتياطي...'); }
+function restoreBackup() { alert('جاري استعادة النسخة...'); }
+function cleanupData() { if(confirm('هل أنت متأكد من تنظيف البيانات القديمة؟')) alert('تم التنظيف'); }
+function rebuildIndexes() { alert('جاري إعادة بناء الفهارس...'); }
+
+function stopSystem() {
+    if(confirm('🚨 تحذير: إيقاف المنصة سيمنع جميع المستخدمين من الوصول!\n\nهل أنت متأكد؟')) {
+        alert('⚠️ تم إيقاف المنصة. جميع المستخدمين سيرون رسالة صيانة.');
+    }
+}
+function startSystem() { alert('🟢 تم إعادة تشغيل المنصة بنجاح'); }
+
+function filterTable(tableId, query) { /* Implementation */ }
+function showModal(id) { alert('فتح نافذة: ' + id); }
+function logout() { window.location.href = '/admin/login'; }
+
+// ==================== Init ====================
+renderTab('dashboard');
+</script>
+
+</body>
+</html>

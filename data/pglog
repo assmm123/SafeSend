@@ -1,0 +1,32 @@
+2026-04-26 03:05:06.299 +03 [3056] LOG:  starting PostgreSQL 18.2 on aarch64-unknown-linux-android, compiled by Android (13989888, +pgo, +bolt, +lto, +mlgo, based on r563880c) clang version 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 5e96669f06077099aa41290cdb4c5e6fa0f59349), 64-bit
+2026-04-26 03:05:06.301 +03 [3056] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-04-26 03:05:06.315 +03 [3056] LOG:  listening on Unix socket "/data/data/com.termux/files/usr/tmp/.s.PGSQL.5432"
+2026-04-26 03:05:06.331 +03 [3066] LOG:  database system was shut down at 2026-04-26 03:05:05 +03
+2026-04-26 03:05:06.344 +03 [3056] LOG:  database system is ready to accept connections
+2026-04-26 03:10:06.429 +03 [3063] LOG:  checkpoint starting: time
+2026-04-26 21:09:29.451 +03 [17807] LOG:  starting PostgreSQL 18.2 on aarch64-unknown-linux-android, compiled by Android (13989888, +pgo, +bolt, +lto, +mlgo, based on r563880c) clang version 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 5e96669f06077099aa41290cdb4c5e6fa0f59349), 64-bit
+2026-04-26 21:09:29.456 +03 [17807] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-04-26 21:09:29.932 +03 [17807] LOG:  listening on Unix socket "/data/data/com.termux/files/usr/tmp/.s.PGSQL.5432"
+2026-04-26 21:09:31.598 +03 [17980] LOG:  database system was interrupted; last known up at 2026-04-26 03:05:06 +03
+2026-04-26 21:09:42.260 +03 [17980] LOG:  syncing data directory (fsync), elapsed time: 10.20 s, current path: ./pg_wal/summaries
+2026-04-26 21:09:55.063 +03 [17980] LOG:  syncing data directory (fsync), elapsed time: 23.00 s, current path: ./global
+2026-04-26 21:10:02.526 +03 [17980] LOG:  syncing data directory (fsync), elapsed time: 30.46 s, current path: ./pg_notify
+2026-04-26 21:10:13.995 +03 [17980] LOG:  syncing data directory (fsync), elapsed time: 41.93 s, current path: ./pg_twophase
+2026-04-26 21:10:22.059 +03 [17980] LOG:  syncing data directory (fsync), elapsed time: 50.00 s, current path: ./PG_VERSION
+2026-04-26 21:10:22.213 +03 [17980] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-04-26 21:10:22.229 +03 [17980] LOG:  redo starts at 0/1763BF8
+2026-04-26 21:10:22.843 +03 [17980] LOG:  invalid record length at 0/1BE0DF0: expected at least 24, got 0
+2026-04-26 21:10:22.843 +03 [17980] LOG:  redo done at 0/1BE0DB8 system usage: CPU: user: 0.02 s, system: 0.06 s, elapsed: 0.62 s
+2026-04-26 21:10:23.040 +03 [17978] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-04-26 21:10:29.238 +03 [19627] FATAL:  the database system is not yet accepting connections
+2026-04-26 21:10:29.238 +03 [19627] DETAIL:  Consistent recovery state has not been yet reached.
+2026-04-26 21:10:29.252 +03 [19628] FATAL:  the database system is not yet accepting connections
+2026-04-26 21:10:29.252 +03 [19628] DETAIL:  Consistent recovery state has not been yet reached.
+2026-04-26 21:10:31.462 +03 [17978] LOG:  checkpoint complete: wrote 974 buffers (5.9%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.291 s, sync=8.096 s, total=8.425 s; sync files=310, longest=1.005 s, average=0.027 s; distance=4596 kB, estimate=4596 kB; lsn=0/1BE0DF0, redo lsn=0/1BE0DF0
+2026-04-26 21:10:31.534 +03 [17807] LOG:  database system is ready to accept connections
+2026-04-26 21:15:23.566 +03 [17978] LOG:  checkpoint starting: time
+2026-04-26 21:15:23.714 +03 [17978] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.112 s, sync=0.002 s, total=0.148 s; sync files=1, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=4137 kB; lsn=0/1BE1210, redo lsn=0/1BE11B8
+2026-04-26 23:48:02.006 +03 [12499] FATAL:  lock file "postmaster.pid" already exists
+2026-04-26 23:48:02.006 +03 [12499] HINT:  Is another postmaster (PID 17807) running in data directory "/data/data/com.termux/files/home/Safe1/data/pgdata"?
+2026-04-26 23:48:02.146 +03 [12501] ERROR:  database "safesend" already exists
+2026-04-26 23:48:02.146 +03 [12501] STATEMENT:  CREATE DATABASE safesend;

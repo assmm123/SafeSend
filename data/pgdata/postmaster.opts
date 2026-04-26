@@ -1,0 +1,1 @@
+/data/data/com.termux/files/usr/bin/postgres "-D" "/data/data/com.termux/files/home/Safe1/data/pgdata"

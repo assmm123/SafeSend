@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - الإشعارات</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link rel="stylesheet" href="/static/css/safesend-enhanced.css">
+</head>
+<body>
+<main class="container animate-in" style="padding-top:20px;padding-bottom:80px;">
+    <h2 class="mb-4">🔔 الإشعارات</h2>
+    
+    <div class="card mb-3" style="border-right:4px solid var(--success);">
+        <div style="display:flex;gap:12px;align-items:start;">
+            <span class="icon-circle icon-circle-sm" style="background:var(--success-bg);color:var(--success);">💰</span>
+            <div><p class="font-bold">تم استلام دفعة!</p><p class="text-muted">500 USDT من Mona · قبل 5 دقائق</p></div>
+        </div>
+    </div>
+    <div class="card mb-3" style="border-right:4px solid var(--primary);">
+        <div style="display:flex;gap:12px;align-items:start;">
+            <span class="icon-circle icon-circle-sm">📋</span>
+            <div><p class="font-bold">صفقة جديدة</p><p class="text-muted">تصميم موقع · $300</p></div>
+        </div>
+    </div>
+    <div class="card mb-3" style="border-right:4px solid var(--warning);">
+        <div style="display:flex;gap:12px;align-items:start;">
+            <span class="icon-circle icon-circle-sm" style="background:var(--warning-bg);color:var(--warning);">💬</span>
+            <div><p class="font-bold">رسالة جديدة</p><p class="text-muted">من Sara · "تمام، في انتظارك"</p></div>
+        </div>
+    </div>
+
+    <nav class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
+        <a href="/deals/new" class="nav-item"><span class="nav-icon">➕</span>جديد</a>
+        <a href="/notifications" class="nav-item active"><span class="nav-icon">🔔</span>تنبيهات</a>
+        <a href="/profile" class="nav-item"><span class="nav-icon">👤</span>حسابي</a>
+    </nav>
+</main>
+</body>
+</html>

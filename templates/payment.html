@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - إتمام الدفع</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; frame-ancestors 'none';">
+    <link rel="preconnect" href="https://api.trongrid.io">
+    <link rel="stylesheet" href="/static/css/safesend.css
+    <link rel="stylesheet" href="/static/css/safesend-enhanced.css">">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous">
+    <style>
+        :root { --payment-primary: #1a73e8; --payment-success: #0d904f; }
+        [data-theme="dark"] { --payment-primary: #4a90d9; }
+        .payment-container { max-width:480px; margin:0 auto; padding:var(--space-6); }
+        .amount-display { font-size:48px; font-weight:900; color:var(--payment-primary); text-align:center; }
+        .qr-wrapper { background:white; padding:var(--space-4); border-radius:var(--radius-lg); display:inline-block; box-shadow:var(--shadow-md); }
+        .qr-wrapper canvas { display:block; }
+        .address-box { background:var(--bg-secondary); padding:var(--space-3); border-radius:var(--radius-sm); font-family:monospace; font-size:13px; word-break:break-all; text-align:center; position:relative; }
+        .address-box .copy-btn { position:absolute; left:8px; top:50%; transform:translateY(-50%); }
+        .timer { font-size:24px; font-weight:700; color:var(--danger); text-align:center; }
+        .timer.warning { animation:pulse 0.5s infinite; }
+        .step-indicator { display:flex; justify-content:center; gap:var(--space-4); margin-bottom:var(--space-6); }
+        .step { text-align:center; font-size:12px; color:var(--text-light); }
+        .step .circle { width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;font-weight:700;font-size:14px;border:2px solid var(--border); }
+        .step.active .circle { background:var(--payment-primary);color:white;border-color:var(--payment-primary); }
+        .step.done .circle { background:var(--payment-success);color:white;border-color:var(--payment-success); }
+        .confirmations-bar { background:var(--bg-secondary);border-radius:var(--radius-full);height:24px;overflow:hidden;position:relative;margin:var(--space-4) 0; }
+        .confirmations-fill { height:100%;background:linear-gradient(90deg,var(--payment-primary),var(--payment-success));transition:width 1s ease;border-radius:var(--radius-full);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;min-width:40px; }
+        .security-phrase { background:var(--primary-bg);padding:var(--space-3);border-radius:var(--radius-sm);text-align:center;font-weight:600;font-size:14px; }
+        .toast-copy { position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--text);color:white;padding:10px 20px;border-radius:var(--radius-full);font-size:13px;z-index:var(--z-toast);animation:fadeInOut 2s forwards; }
+        @keyframes fadeInOut { 0%{opacity:0;top:40px;} 15%{opacity:1;top:20px;} 75%{opacity:1;top:20px;} 100%{opacity:0;top:0;} }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        .confetti { position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999; }
+        .skeleton-qr { width:200px;height:200px;margin:0 auto; }
+        @media (max-width:480px) { .amount-display { font-size:36px; } }
+    </style>
+</head>
+<body>
+
+<main class="payment-container">
+    
+    <!-- Step Indicator -->
+    <div class="step-indicator">
+        <div class="step active"><div class="circle">1</div>الدفع</div>
+        <div class="step" id="step2"><div class="circle">2</div>التأكيد</div>
+        <div class="step" id="step3"><div class="circle">3</div>الإيصال</div>
+    </div>
+
+    <!-- Deal Info -->
+    <div class="card text-center mb-4">
+        <p class="text-muted text-sm">أنت تدفع مقابل</p>
+        <p class="font-bold text-lg">تصميم موقع احترافي</p>
+        <p class="text-muted">البائع: Ahmed ★ 4.8</p>
+    </div>
+
+    <!-- Amount -->
+    <div class="amount-display mb-4" id="amount">500 USDT</div>
+    <p class="text-center text-muted mb-4">≈ 1,875 ريال سعودي</p>
+
+    <!-- Timer -->
+    <div class="text-center mb-4">
+        <p class="text-sm text-muted">⏰ تنتهي الصلاحية خلال</p>
+        <div class="timer" id="timer">30:00</div>
+    </div>
+
+    <!-- QR Code -->
+    <div class="text-center mb-4">
+        <div class="qr-wrapper" id="qrContainer">
+            <div class="skeleton-qr skeleton" id="qrLoader"></div>
+            <canvas id="qrCanvas" width="200" height="200" style="display:none;"></canvas>
+        </div>
+        <p class="text-xs text-muted mt-2">امسح الرمز بمحفظة Trust Wallet</p>
+    </div>
+
+    <!-- Wallet Address -->
+    <div class="mb-4">
+        <p class="font-semibold text-sm mb-2">أو أرسل إلى العنوان:</p>
+        <div class="address-box" id="addressBox">
+            <span id="walletAddress">TRX1234567890abcdefTRX1234567890ab</span>
+            <button class="btn btn-ghost btn-icon btn-sm copy-btn" onclick="copyAddress()" title="نسخ" aria-label="نسخ العنوان">📋</button>
+        </div>
+        <p class="text-xs text-muted mt-1">شبكة: TRC20 · عمولة: 5%</p>
+    </div>
+
+    <!-- Security Phrase -->
+    <div class="security-phrase mb-4">
+        🔒 رمز الأمان: <span id="securityCode">SAFE-7XK2</span>
+        <p class="text-xs text-muted mt-1">تأكد من ظهور هذا الرمز قبل الدفع</p>
+    </div>
+
+    <!-- Confirmations -->
+    <div class="card mb-4" id="confirmationsCard" style="display:none;">
+        <p class="font-semibold text-sm mb-2">تأكيدات الشبكة</p>
+        <div class="confirmations-bar">
+            <div class="confirmations-fill" id="confirmationsFill" style="width:15%;">3/20</div>
+        </div>
+        <p class="text-xs text-muted mt-1">متوقع التأكيد خلال 2-5 دقائق</p>
+    </div>
+
+    <!-- Status -->
+    <div class="text-center mb-4" id="statusArea">
+        <span class="badge badge-warning">⏳ في انتظار الدفع</span>
+    </div>
+
+    <!-- Actions -->
+    <div class="grid-2 mb-4">
+        <button class="btn btn-outline btn-block" onclick="openWallet()">🔗 Trust Wallet</button>
+        <button class="btn btn-outline btn-block" onclick="retryPayment()">🔄 تجديد</button>
+    </div>
+
+    <!-- Alternative Methods -->
+    <div class="card mb-4">
+        <p class="font-semibold text-sm mb-3">طرق دفع أخرى</p>
+        <div class="grid-2">
+            <button class="btn btn-outline btn-sm btn-block" onclick="switchMethod('binance')">🏦 Binance Pay</button>
+            <button class="btn btn-outline btn-sm btn-block" onclick="switchMethod('shamcash')">📱 شام كاش</button>
+            <button class="btn btn-outline btn-sm btn-block" onclick="switchMethod('bep20')">🟡 BEP20</button>
+            <button class="btn btn-outline btn-sm btn-block" onclick="switchMethod('erc20')">🔵 ERC20</button>
+        </div>
+    </div>
+
+    <!-- Receipt Preview (hidden until paid) -->
+    <div id="receiptArea" style="display:none;">
+        <div class="card text-center">
+            <div style="font-size:60px;">✅</div>
+            <p class="font-bold text-lg" style="color:var(--payment-success);">تم تأكيد الدفع!</p>
+            <p class="text-muted">رقم المعاملة: <span id="txHash">0x1234...abcd</span></p>
+            <div class="grid-2 mt-4">
+                <button class="btn btn-primary btn-block" onclick="downloadReceipt()">📥 تحميل PDF</button>
+                <button class="btn btn-outline btn-block" onclick="shareReceipt()">📤 مشاركة</button>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<!-- Hidden file input for receipt -->
+<input type="file" id="fileInput" style="display:none;">
+
+<script src="/static/js/main.js"></script>
+<script>
+    // ==================== State ====================
+    const DEAL = {
+        id: '1234', title: 'تصميم موقع احترالي', amount: 500, currency: 'USDT',
+        seller: 'Ahmed', sellerRating: 4.8,
+        address: 'TRX1234567890abcdefTRX1234567890ab',
+        network: 'TRC20', expiryMinutes: 30
+    };
+    let timeLeft = DEAL.expiryMinutes * 60;
+    let confirmations = 0;
+    let isPaid = false;
+    let checkInterval = null;
+    let worker = null;
+
+    // ==================== Init ====================
+    function init() {
+        generateQR(DEAL.address, DEAL.amount);
+        document.getElementById('securityCode').textContent = 'SAFE-' + Math.random().toString(36).substring(2,6).toUpperCase();
+        startTimer();
+        startConfirmationWorker();
+        checkInterval = setInterval(checkPaymentStatus, 10000);
+        
+        // Wake Lock
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').catch(() => {});
+        }
+    }
+
+    // ==================== QR Code ====================
+    function generateQR(address, amount) {
+        const canvas = document.getElementById('qrCanvas');
+        const loader = document.getElementById('qrLoader');
+        
+        // Simple QR generation (checkerboard pattern for demo)
+        const ctx = canvas.getContext('2d');
+        const size = 200;
+        const moduleCount = 25;
+        const moduleSize = size / moduleCount;
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#000000';
+        
+        // Generate deterministic pattern based on address
+        const seed = address.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+        for (let row = 0; row < moduleCount; row++) {
+            for (let col = 0; col < moduleCount; col++) {
+                if ((row * col + seed + row + col) % 3 === 0) {
+                    ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                }
+            }
+        }
+        
+        // Finder patterns
+        drawFinder(ctx, 0, 0, moduleSize);
+        drawFinder(ctx, (moduleCount - 7) * moduleSize, 0, moduleSize);
+        drawFinder(ctx, 0, (moduleCount - 7) * moduleSize, moduleSize);
+        
+        loader.style.display = 'none';
+        canvas.style.display = 'block';
+    }
+
+    function drawFinder(ctx, x, y, s) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x, y, 7*s, 7*s);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x+s, y+s, 5*s, 5*s);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x+2*s, y+2*s, 3*s, 3*s);
+    }
+
+    // ==================== Timer ====================
+    function startTimer() {
+        const timer = document.getElementById('timer');
+        const interval = setInterval(() => {
+            if (isPaid) { clearInterval(interval); return; }
+            timeLeft--;
+            const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const s = String(timeLeft % 60).padStart(2, '0');
+            timer.textContent = `${m}:${s}`;
+            
+            if (timeLeft <= 300) timer.classList.add('warning');
+            if (timeLeft <= 0) {
+                clearInterval(interval);
+                timer.textContent = 'انتهت الصلاحية';
+                document.getElementById('statusArea').innerHTML = '<span class="badge badge-danger">❌ منتهي</span>';
+            }
+        }, 1000);
+    }
+
+    // ==================== Web Worker ====================
+    function startConfirmationWorker() {
+        const blob = new Blob([`
+            let count = 0;
+            setInterval(() => {
+                count += Math.random() > 0.6 ? 1 : 0;
+                if (count > 20) count = 20;
+                self.postMessage({ confirmations: count, done: count >= 20 });
+            }, 3000);
+        `], { type: 'application/javascript' });
+        
+        worker = new Worker(URL.createObjectURL(blob));
+        worker.onmessage = (e) => {
+            if (e.data.confirmations > 0) {
+                document.getElementById('confirmationsCard').style.display = 'block';
+                document.getElementById('step2').classList.add('active');
+            }
+            confirmations = e.data.confirmations;
+            const fill = document.getElementById('confirmationsFill');
+            fill.style.width = (confirmations / 20 * 100) + '%';
+            fill.textContent = confirmations + '/20';
+            
+            if (e.data.done && !isPaid) {
+                markAsPaid();
+            }
+        };
+    }
+
+    // ==================== Payment Check ====================
+    async function checkPaymentStatus() {
+        if (isPaid || timeLeft <= 0) return;
+        
+        try {
+            const res = await fetch(`/api/v1/payments/${DEAL.id}/status`, {
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('safesend_token') }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.is_paid) markAsPaid(data.tx_hash);
+            }
+        } catch(e) { console.log('Check failed, retrying...'); }
+    }
+
+    function markAsPaid(txHash) {
+        isPaid = true;
+        clearInterval(checkInterval);
+        if (worker) worker.terminate();
+        
+        document.getElementById('statusArea').innerHTML = '<span class="badge badge-success">✅ تم الدفع</span>';
+        document.getElementById('step2').classList.add('done');
+        document.getElementById('step3').classList.add('active');
+        document.getElementById('receiptArea').style.display = 'block';
+        document.getElementById('txHash').textContent = txHash || '0x' + Math.random().toString(36).substring(2,10);
+        
+        // Confetti
+        createConfetti();
+        
+        // Sound
+        playSuccessSound();
+        
+        // Vibrate
+        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+        
+        // Scroll to receipt
+        document.getElementById('receiptArea').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ==================== Actions ====================
+    function copyAddress() {
+        const addr = document.getElementById('walletAddress').textContent;
+        navigator.clipboard.writeText(addr).then(() => {
+            showToast('✅ تم نسخ العنوان!');
+            // Clear clipboard after 60s
+            setTimeout(() => navigator.clipboard.writeText(''), 60000);
+        });
+    }
+
+    function openWallet() {
+        const deepLink = `tron://${DEAL.address}?amount=${DEAL.amount}&currency=${DEAL.currency}`;
+        window.open(deepLink, '_blank');
+    }
+
+    function retryPayment() {
+        timeLeft = DEAL.expiryMinutes * 60;
+        document.getElementById('timer').classList.remove('warning');
+        document.getElementById('statusArea').innerHTML = '<span class="badge badge-warning">⏳ في انتظار الدفع</span>';
+        startTimer();
+    }
+
+    function switchMethod(method) {
+        const networks = { binance:'BSC', shamcash:'شام كاش', bep20:'BEP20', erc20:'ERC20' };
+        alert(`تم التبديل إلى ${networks[method]}\nالعنوان: ${DEAL.address}\nالمبلغ: ${DEAL.amount} ${DEAL.currency}`);
+    }
+
+    function downloadReceipt() {
+        window.open(`/api/v1/payments/${DEAL.id}/receipt`, '_blank');
+    }
+
+    function shareReceipt() {
+        if (navigator.share) {
+            navigator.share({
+                title: 'إيصال دفع SafeSend',
+                text: `تم دفع ${DEAL.amount} ${DEAL.currency} للصفقة: ${DEAL.title}`,
+                url: window.location.href
+            });
+        }
+    }
+
+    // ==================== UI Effects ====================
+    function showToast(msg) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-copy';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+
+    function createConfetti() {
+        const colors = ['#1a73e8','#0d904f','#f5a623','#d93025','#FFD700','#FF69B4'];
+        const container = document.createElement('div');
+        container.className = 'confetti';
+        document.body.appendChild(container);
+        
+        for (let i = 0; i < 80; i++) {
+            const confetti = document.createElement('div');
+            confetti.style.cssText = `
+                position:absolute; width:10px; height:10px;
+                background:${colors[Math.floor(Math.random()*colors.length)]};
+                left:${Math.random()*100}%; top:-20px;
+                border-radius:${Math.random()>0.5?'50%':'2px'};
+                animation: confettiFall ${2+Math.random()*3}s ease-in forwards;
+                animation-delay: ${Math.random()*2}s;
+            `;
+            container.appendChild(confetti);
+        }
+        
+        const style = document.createElement('style');
+        style.textContent = `@keyframes confettiFall { to { top:110%; transform:rotate(${360+Math.random()*720}deg); } }`;
+        document.head.appendChild(style);
+        
+        setTimeout(() => container.remove(), 5000);
+    }
+
+    function playSuccessSound() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const notes = [523, 659, 784, 1047];
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.value = freq;
+                osc.type = 'sine';
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
+                osc.start(ctx.currentTime + i * 0.15);
+                osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+            });
+        } catch(e) {}
+    }
+
+    // ==================== Start ====================
+    init();
+</script>
+
+</body>
+</html>

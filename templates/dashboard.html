@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="app.name">SafeSend - لوحة التحكم</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/static/css/safesend.css
+    <link rel="stylesheet" href="/static/css/safesend-enhanced.css">">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+        .chart-container { background: var(--surface); border-radius: var(--radius); padding: var(--space-4); border: 1px solid var(--border); }
+        .chart-container canvas { max-height: 200px; }
+        .notif-dropdown { position: absolute; top: 100%; left: 0; width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); z-index: var(--z-dropdown); display: none; }
+        .notif-dropdown.show { display: block; }
+        .notif-item { padding: var(--space-3); border-bottom: 1px solid var(--border-light); font-size: var(--font-size-sm); cursor: pointer; }
+        .notif-item:hover { background: var(--surface-hover); }
+        .notif-item.unread { background: var(--primary-bg); }
+        @media (max-width: 768px) { .dashboard-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<!-- ==================== Top Navigation ==================== -->
+<nav class="top-nav">
+    <div style="display:flex;align-items:center;gap:var(--space-3);">
+        <span style="font-size:24px;">🛡️</span>
+        <span class="font-bold text-lg" data-i18n="app.name">SafeSend</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:var(--space-3);">
+        <span class="connection-status connected" id="connection-status">
+            <span class="status-dot status-dot-green"></span> متصل
+        </span>
+        <button class="btn btn-ghost btn-icon" data-toggle-theme title="تبديل السمة">🌓</button>
+        <button class="btn btn-ghost btn-icon" data-toggle-lang title="Switch Language">🌐</button>
+        <div style="position:relative;">
+            <button class="btn btn-ghost btn-icon" id="notif-btn" title="الإشعارات">🔔<span id="notif-badge" style="background:var(--danger);color:white;border-radius:50%;padding:1px 6px;font-size:10px;position:absolute;top:-2px;right:-2px;display:none;">0</span></button>
+            <div class="notif-dropdown" id="notif-dropdown">
+                <p class="font-semibold p-3" style="border-bottom:1px solid var(--border);">الإشعارات</p>
+                <div id="notif-list">
+                    <p class="text-muted text-center p-4">لا توجد إشعارات</p>
+                </div>
+                <a href="/notifications" class="btn btn-ghost btn-block btn-sm">عرض الكل</a>
+            </div>
+        </div>
+        <button class="btn btn-ghost btn-icon" data-logout title="تسجيل الخروج">🚪</button>
+    </div>
+</nav>
+
+<!-- ==================== Main Content ==================== -->
+<main class="container" style="padding-top:var(--space-6);padding-bottom:calc(var(--bottom-nav-height) + var(--space-6));">
+
+    <!-- PWA Install Banner -->
+    <div id="install-banner" class="install-banner mb-4" style="display:none;">
+        <span>📲 ثبّت التطبيق للوصول السريع</span>
+        <button class="btn btn-sm" style="background:white;color:var(--primary);" data-install>تثبيت</button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid-4 mb-6">
+        <div class="stat-card">
+            <span style="font-size:28px;">📋</span>
+            <div class="stat-number" id="stat-active">12</div>
+            <div class="stat-label">صفقات نشطة</div>
+        </div>
+        <div class="stat-card">
+            <span style="font-size:28px;">✅</span>
+            <div class="stat-number" id="stat-completed">45</div>
+            <div class="stat-label">مكتملة</div>
+        </div>
+        <div class="stat-card">
+            <span style="font-size:28px;">⭐</span>
+            <div class="stat-number" id="stat-rating">4.8</div>
+            <div class="stat-label">تقييمي</div>
+        </div>
+        <div class="stat-card">
+            <span style="font-size:28px;">💰</span>
+            <div class="stat-number" id="stat-volume">$12.5K</div>
+            <div class="stat-label">حجم التعاملات</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="dashboard-grid mb-6">
+        <div class="chart-container">
+            <p class="font-semibold mb-3">📊 الإيرادات (آخر 7 أيام)</p>
+            <canvas id="revenueChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <p class="font-semibold mb-3">📈 توزيع الصفقات</p>
+            <canvas id="dealsChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <p class="font-bold text-lg mb-3">⚡ إجراءات سريعة</p>
+    <div class="grid-3 mb-6">
+        <a href="/deals/new" class="card card-interactive text-center">
+            <span style="font-size:32px;">➕</span>
+            <p class="font-semibold mt-2">صفقة جديدة</p>
+        </a>
+        <a href="/messages" class="card card-interactive text-center">
+            <span style="font-size:32px;">💬</span>
+            <p class="font-semibold mt-2">الرسائل</p>
+        </a>
+        <a href="/files" class="card card-interactive text-center">
+            <span style="font-size:32px;">📁</span>
+            <p class="font-semibold mt-2">ملفاتي</p>
+        </a>
+    </div>
+
+    <!-- Active Deals -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
+        <p class="font-bold text-lg">📋 صفقاتي النشطة</p>
+        <a href="/deals" class="btn btn-ghost btn-sm">عرض الكل →</a>
+    </div>
+    <div id="active-deals">
+        <div class="card mb-3">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+                <div>
+                    <p class="font-semibold">تصميم موقع احترافي</p>
+                    <p class="text-sm text-muted">$500 · مع Ahmed</p>
+                </div>
+                <span class="badge badge-warning">قيد الدفع</span>
+            </div>
+            <div class="progress mt-3"><div class="progress-bar progress-primary" style="width:60%;"></div></div>
+            <p class="text-xs text-muted mt-1">60% · ⏰ 5 أيام متبقية</p>
+        </div>
+        <div class="card mb-3">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+                <div>
+                    <p class="font-semibold">ترجمة مستندات قانونية</p>
+                    <p class="text-sm text-muted">$200 · مع Sara</p>
+                </div>
+                <span class="badge badge-success">ممول</span>
+            </div>
+            <div class="progress mt-3"><div class="progress-bar progress-success" style="width:100%;"></div></div>
+            <p class="text-xs text-muted mt-1">100% · ⏰ 3 أيام متبقية</p>
+        </div>
+        <div class="card mb-3">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+                <div>
+                    <p class="font-semibold">استشارة تقنية</p>
+                    <p class="text-sm text-muted">$50 · مع Ali</p>
+                </div>
+                <span class="badge badge-info">قيد التسليم</span>
+            </div>
+            <div class="progress mt-3"><div class="progress-bar progress-primary" style="width:80%;"></div></div>
+            <p class="text-xs text-muted mt-1">80% · ⏰ يوم واحد متبقي</p>
+        </div>
+    </div>
+
+    <!-- Offline Indicator -->
+    <div id="offline-banner" class="card text-center" style="background:var(--warning-bg);display:none;">
+        <p class="font-semibold" style="color:var(--warning);">⚠️ أنت غير متصل بالإنترنت</p>
+        <p class="text-sm text-muted">سيتم مزامنة البيانات عند عودة الاتصال</p>
+    </div>
+
+</main>
+
+<!-- ==================== Bottom Navigation ==================== -->
+<nav class="bottom-nav">
+    <a href="/dashboard" class="nav-item active"><span class="nav-icon">🏠</span><span data-i18n="nav.home">الرئيسية</span></a>
+    <a href="/messages" class="nav-item"><span class="nav-icon">💬</span><span data-i18n="nav.chat">محادثات</span></a>
+    <a href="/deals/new" class="nav-item"><span class="nav-icon">➕</span><span data-i18n="nav.new">جديد</span></a>
+    <a href="/notifications" class="nav-item"><span class="nav-icon">🔔</span><span data-i18n="nav.alerts">تنبيهات</span></a>
+    <a href="/profile" class="nav-item"><span class="nav-icon">👤</span><span data-i18n="nav.profile">حسابي</span></a>
+</nav>
+
+<!-- ==================== Scripts ==================== -->
+<script src="/static/js/main.js"></script>
+<script>
+    // ==================== Notification Dropdown ====================
+    const notifBtn = document.getElementById('notif-btn');
+    const notifDropdown = document.getElementById('notif-dropdown');
+    notifBtn.addEventListener('click', (e) => { e.stopPropagation(); notifDropdown.classList.toggle('show'); });
+    document.addEventListener('click', () => notifDropdown.classList.remove('show'));
+
+    // ==================== Revenue Chart ====================
+    const revCtx = document.getElementById('revenueChart').getContext('2d');
+    new Chart(revCtx, {
+        type: 'line',
+        data: {
+            labels: ['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','اليوم'],
+            datasets: [{
+                label: 'الإيرادات (USDT)',
+                data: [120, 250, 180, 300, 450, 320, 500],
+                borderColor: '#1a73e8',
+                backgroundColor: 'rgba(26,115,232,0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#1a73e8'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: '#e2e8f0' } }, x: { grid: { display: false } } }
+        }
+    });
+
+    // ==================== Deals Distribution Chart ====================
+    const dealsCtx = document.getElementById('dealsChart').getContext('2d');
+    new Chart(dealsCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['قيد الدفع', 'ممولة', 'قيد التسليم', 'مكتملة', 'نزاع'],
+            datasets: [{
+                data: [3, 5, 2, 45, 1],
+                backgroundColor: ['#f5a623','#0d904f','#1a73e8','#64748b','#d93025'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true } }
+            }
+        }
+    });
+
+    // ==================== Auto Refresh Stats ====================
+    function refreshStats() {
+        fetch('/api/v1/deals/stats', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('safesend_token') }})
+            .then(r => r.json())
+            .then(data => {
+                if (data.stats) {
+                    document.getElementById('stat-active').textContent = data.stats.active || 0;
+                    document.getElementById('stat-completed').textContent = data.stats.completed || 0;
+                }
+            })
+            .catch(() => {});
+    }
+    setInterval(refreshStats, 30000);
+
+    // ==================== Offline Banner ====================
+    window.addEventListener('offline', () => { document.getElementById('offline-banner').style.display = 'block'; });
+    window.addEventListener('online', () => { document.getElementById('offline-banner').style.display = 'none'; });
+</script>
+
+</body>
+</html>

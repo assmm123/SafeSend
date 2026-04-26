@@ -1,0 +1,301 @@
+"""
+عميل TronGrid متقدم
+Advanced TronGrid Client
+
+خفيف، مع Redis Cache، ودعم Async (اختياري)
+يعمل بدون tronpy على Termux
+"""
+
+import json
+import time
+from decimal import Decimal
+from typing import Optional, Dict, Any, List
+
+import requests
+
+# Async optional
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    aiohttp = None
+    AIOHTTP_AVAILABLE = False
+
+from src.app.models.helpers import utc_now
+from src.app.models.logging_config import get_logger
+from src.core.circuit_breaker import CircuitBreaker, CircuitBreakerState
+
+logger = get_logger(__name__)
+
+
+class TronNetwork:
+    MAINNET = "mainnet"
+    SHASTA = "shasta"
+    NILE = "nile"
+
+
+class TronClient:
+    """
+    عميل TronGrid متقدم
+    يدعم Redis Cache و Async (اختياري)
+    """
+    
+    API_URLS = {
+        TronNetwork.MAINNET: "https://api.trongrid.io",
+        TronNetwork.SHASTA: "https://api.shasta.trongrid.io",
+        TronNetwork.NILE: "https://nile.trongrid.io",
+    }
+    
+    USDT_CONTRACT = {
+        TronNetwork.MAINNET: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        TronNetwork.SHASTA: "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs",
+        TronNetwork.NILE: "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+    }
+    
+    DECIMALS = 10 ** 6
+    CACHE_TTL = 60
+    
+    def __init__(
+        self,
+        network: str = TronNetwork.SHASTA,
+        api_key: Optional[str] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        redis_client: Any = None
+    ):
+        self.network = network
+        self.api_key = api_key
+        self.base_url = self.API_URLS[network]
+        self.usdt_contract = self.USDT_CONTRACT[network]
+        self.redis = redis_client
+        
+        self.circuit_breaker = circuit_breaker or CircuitBreaker(
+            name=f"tron_client_{network}",
+            failure_threshold=3,
+            timeout=30.0
+        )
+        
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        })
+        if api_key:
+            self.session.headers["TRON-PRO-API-KEY"] = api_key
+        
+        self._async_session = None
+        
+        logger.info(f"TronClient initialized: network={network}, cache={redis_client is not None}, async={AIOHTTP_AVAILABLE}")
+    
+    # ============================================
+    # Redis Cache Helpers
+    # ============================================
+    
+    def _cache_get(self, key: str) -> Optional[str]:
+        if self.redis:
+            return self.redis.get(key)
+        return None
+    
+    def _cache_set(self, key: str, value: str, ttl: int = CACHE_TTL):
+        if self.redis:
+            self.redis.setex(key, ttl, value)
+    
+    def _cache_key(self, prefix: str, identifier: str) -> str:
+        return f"tron:{self.network}:{prefix}:{identifier}"
+    
+    # ============================================
+    # Sync API Methods
+    # ============================================
+    
+    def _request(self, endpoint: str, params: dict = None) -> dict:
+        def _do():
+            url = f"{self.base_url}{endpoint}"
+            resp = self.session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+        
+        try:
+            return self.circuit_breaker.call(_do)
+        except Exception as e:
+            logger.error(f"API request failed: {endpoint} - {e}")
+            return {}
+    
+    def get_account_info(self, address: str) -> dict:
+        return self._request(f"/v1/accounts/{address}")
+    
+    def get_usdt_balance(self, address: str, use_cache: bool = True) -> Decimal:
+        if use_cache:
+            cache_key = self._cache_key("balance", address)
+            cached = self._cache_get(cache_key)
+            if cached:
+                logger.debug(f"Cache hit for {address}")
+                return Decimal(cached)
+        
+        data = self._request(f"/v1/accounts/{address}/transactions/trc20")
+        
+        balance = Decimal(0)
+        for token in data.get("data", []):
+            token_info = token.get("token_info", {})
+            if token_info.get("address") == self.usdt_contract:
+                balance = Decimal(int(token.get("balance", 0))) / Decimal(self.DECIMALS)
+                break
+        
+        if use_cache:
+            cache_key = self._cache_key("balance", address)
+            self._cache_set(cache_key, str(balance))
+        
+        return balance
+    
+    def get_trx_balance(self, address: str) -> Decimal:
+        data = self.get_account_info(address)
+        balance = data.get("balance", 0)
+        return Decimal(balance) / Decimal(10 ** 6)
+    
+    def get_transaction(self, tx_hash: str) -> dict:
+        return self._request(f"/v1/transactions/{tx_hash}")
+    
+    def get_transactions(self, address: str, limit: int = 50) -> List[dict]:
+        params = {"limit": limit, "only_confirmed": "true"}
+        data = self._request(f"/v1/accounts/{address}/transactions", params)
+        return data.get("data", [])
+    
+    def check_usdt_transaction(
+        self,
+        address: str,
+        expected_amount: Decimal,
+        memo: Optional[str] = None
+    ) -> Optional[dict]:
+        txs = self.get_transactions(address, limit=50)
+        expected_sun = int(expected_amount * Decimal(self.DECIMALS))
+        
+        for tx in txs:
+            contract = tx.get("raw_data", {}).get("contract", [{}])[0]
+            if contract.get("type") != "TriggerSmartContract":
+                continue
+            
+            parameter = contract.get("parameter", {}).get("value", {})
+            amount = parameter.get("amount", 0)
+            
+            if amount < expected_sun:
+                continue
+            
+            if memo:
+                tx_data = parameter.get("data", "")
+                if memo not in tx_data:
+                    continue
+            
+            if tx.get("confirmations", 0) < 20:
+                continue
+            
+            return {
+                "tx_hash": tx["txID"],
+                "amount": Decimal(amount) / Decimal(self.DECIMALS),
+                "from": parameter.get("owner_address"),
+                "to": parameter.get("to_address"),
+                "confirmations": tx.get("confirmations", 0),
+                "block": tx.get("blockNumber"),
+                "timestamp": tx.get("block_timestamp"),
+            }
+        
+        return None
+    
+    def get_latest_block(self) -> int:
+        data = self._request("/v1/blocks/latest")
+        return data.get("block_header", {}).get("raw_data", {}).get("number", 0)
+    
+    # ============================================
+    # Async API Methods (Optional)
+    # ============================================
+    
+    @property
+    def async_available(self) -> bool:
+        return AIOHTTP_AVAILABLE
+    
+    async def _get_async_session(self):
+        if not AIOHTTP_AVAILABLE:
+            raise ImportError("aiohttp not installed. Run: pip install aiohttp")
+        
+        if self._async_session is None or self._async_session.closed:
+            headers = {"Content-Type": "application/json", "Accept": "application/json"}
+            if self.api_key:
+                headers["TRON-PRO-API-KEY"] = self.api_key
+            self._async_session = aiohttp.ClientSession(headers=headers)
+        return self._async_session
+    
+    async def close_async_session(self):
+        if self._async_session and not self._async_session.closed:
+            await self._async_session.close()
+            self._async_session = None
+    
+    async def get_usdt_balance_async(self, address: str, use_cache: bool = True) -> Decimal:
+        if not AIOHTTP_AVAILABLE:
+            return self.get_usdt_balance(address, use_cache)
+        
+        if use_cache:
+            cache_key = self._cache_key("balance", address)
+            cached = self._cache_get(cache_key)
+            if cached:
+                return Decimal(cached)
+        
+        session = await self._get_async_session()
+        url = f"{self.base_url}/v1/accounts/{address}/transactions/trc20"
+        
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+        except Exception as e:
+            logger.error(f"Async API request failed: {e}")
+            return Decimal(0)
+        
+        balance = Decimal(0)
+        for token in data.get("data", []):
+            token_info = token.get("token_info", {})
+            if token_info.get("address") == self.usdt_contract:
+                balance = Decimal(int(token.get("balance", 0))) / Decimal(self.DECIMALS)
+                break
+        
+        if use_cache:
+            cache_key = self._cache_key("balance", address)
+            self._cache_set(cache_key, str(balance))
+        
+        return balance
+    
+    # ============================================
+    # Health & Monitoring
+    # ============================================
+    
+    def health_check(self) -> Dict[str, Any]:
+        try:
+            block = self.get_latest_block()
+            status = "healthy" if block > 0 else "degraded"
+        except Exception as e:
+            status = "unhealthy"
+            block = 0
+        
+        return {
+            "status": status,
+            "network": self.network,
+            "latest_block": block,
+            "circuit_breaker": self.circuit_breaker.state.value,
+            "cache_enabled": self.redis is not None,
+            "async_available": AIOHTTP_AVAILABLE,
+        }
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        return {
+            "network": self.network,
+            "circuit_breaker": self.circuit_breaker.get_metrics(),
+            "cache_enabled": self.redis is not None,
+            "async_available": AIOHTTP_AVAILABLE,
+        }
+    
+    def invalidate_cache(self, address: str):
+        if self.redis:
+            cache_key = self._cache_key("balance", address)
+            self.redis.delete(cache_key)
+    
+    def __repr__(self) -> str:
+        return f"<TronClient network={self.network} cache={self.redis is not None} async={AIOHTTP_AVAILABLE}>"
+
+
+__all__ = ["TronClient", "TronNetwork"]

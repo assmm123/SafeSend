@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SafeSend - معاينة آمنة</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self'; img-src 'self' data:;">
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { -webkit-touch-callout:none !important; -webkit-user-select:none !important; user-select:none !important; }
+        @media print { body * { display:none !important; } body::after { content:'الطباعة غير مسموحة'; display:block !important; } }
+        body { overflow:hidden; height:100vh; margin:0; background:#000; cursor:default; }
+        .preview-container { position:relative; width:100%; height:100vh; display:flex; align-items:center; justify-content:center; background:#1a1a2e; }
+        .preview-content { position:relative; max-width:90%; max-height:80vh; overflow:hidden; border-radius:var(--radius); z-index:2; }
+        .preview-content img, .preview-content video { max-width:100%; max-height:80vh; pointer-events:none; border-radius:var(--radius); }
+        .watermark-layer { position:absolute; inset:0; pointer-events:none; z-index:10; overflow:hidden; }
+        .watermark-text { position:absolute; color:rgba(255,255,255,0.12); font-size:18px; font-weight:800; white-space:nowrap; transform:rotate(-25deg); text-shadow:0 0 15px rgba(0,0,0,0.5); animation:moveWatermark 30s linear infinite; }
+        .watermark-text:nth-child(2) { top:40%; left:-20%; animation-delay:-10s; color:rgba(255,255,255,0.08); }
+        .watermark-text:nth-child(3) { top:70%; left:-10%; animation-delay:-20s; color:rgba(255,255,255,0.06); }
+        @keyframes moveWatermark { 0%{transform:rotate(-25deg) translateX(-50%);} 100%{transform:rotate(-25deg) translateX(150%);} }
+        .timer-bar { position:fixed; top:0; left:0; right:0; height:4px; background:var(--primary); z-index:100; transition:width 1s linear; }
+        .timer-bar.warning { background:var(--danger); animation:pulse 0.5s infinite; }
+        .header-overlay { position:fixed; top:var(--space-3); left:50%; transform:translateX(-50%); z-index:50; display:flex; gap:var(--space-3); align-items:center; }
+        .warning-banner { position:fixed; bottom:var(--space-4); left:50%; transform:translateX(-50%); z-index:50; background:var(--danger); color:white; padding:var(--space-3) var(--space-4); border-radius:var(--radius-full); font-size:13px; font-weight:600; display:none; animation:fadeIn 0.3s; }
+        .screenshot-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:200; display:none; align-items:center; justify-content:center; color:white; font-size:24px; font-weight:700; text-align:center; }
+        .screenshot-overlay.show { display:flex; }
+        .devtools-warning { position:fixed; top:0; left:0; right:0; background:var(--danger); color:white; text-align:center; padding:var(--space-2); font-size:12px; font-weight:700; z-index:300; display:none; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+    </style>
+</head>
+<body oncontextmenu="return false" onselectstart="return false" ondragstart="return false" oncopy="return false" oncut="return false" onpaste="return false">
+
+<!-- DevTools Warning -->
+<div class="devtools-warning" id="devtoolsWarning">⚠️ تم اكتشاف أدوات المطور! المعاينة غير مسموحة مع فتح DevTools.</div>
+
+<!-- Timer Bar -->
+<div class="timer-bar" id="timerBar" style="width:100%;"></div>
+
+<!-- Screenshot Overlay -->
+<div class="screenshot-overlay" id="screenshotOverlay">
+    <div>⛔ تم اكتشاف محاولة تصوير!<br><span style="font-size:16px;opacity:0.7;">تم إخفاء المحتوى لحمايته</span></div>
+</div>
+
+<!-- Header -->
+<div class="header-overlay">
+    <span style="background:rgba(0,0,0,0.7);color:white;padding:6px 14px;border-radius:var(--radius-full);font-size:13px;">🔒 معاينة آمنة</span>
+    <span style="background:rgba(0,0,0,0.7);color:white;padding:6px 14px;border-radius:var(--radius-full);font-size:13px;" id="timerDisplay">05:00</span>
+</div>
+
+<!-- Preview -->
+<div class="preview-container" id="previewContainer">
+    <div class="preview-content" id="previewContent">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect fill='%23f0f0f0' width='800' height='600'/%3E%3Ctext x='400' y='300' text-anchor='middle' fill='%23999' font-size='24'%3E🖼️ معاينة الملف%3C/text%3E%3C/svg%3E" alt="معاينة" id="previewImage">
+        
+        <!-- Watermarks -->
+        <div class="watermark-layer" id="watermarkLayer">
+            <div class="watermark-text" id="wm1">SafeSend Pro | user@email.com | 192.168.1.1 | 2024-05-12</div>
+            <div class="watermark-text" id="wm2">SafeSend Pro | Session: 7XK2-PL9M | Do Not Copy</div>
+            <div class="watermark-text" id="wm3">SafeSend Pro | Protected Content | All Rights Reserved</div>
+        </div>
+    </div>
+</div>
+
+<!-- Warning Banner -->
+<div class="warning-banner" id="warningBanner">⚠️ تنتهي الجلسة خلال 60 ثانية</div>
+
+<script src="/static/js/main.js"></script>
+<script>
+    // ==================== State ====================
+    const SESSION = {
+        id: '7XK2-PL9M',
+        duration: 300,
+        file: 'design-v1.psd',
+        owner: 'Ahmed',
+        user: 'user@email.com',
+        ip: '192.168.1.1'
+    };
+    let timeLeft = SESSION.duration;
+    let isDevToolsOpen = false;
+    let devToolsCheckCount = 0;
+    let sessionEnded = false;
+
+    // ==================== Init ====================
+    function init() {
+        updateWatermarks();
+        startTimer();
+        startDevToolsDetection();
+        startScreenshotDetection();
+        startRecordingDetection();
+        startTabSwitchDetection();
+        disableShortcuts();
+        console.log('%c⚠️ تحذير أمني %c| %cالعبث بهذه الصفحة مخالف لشروط الاستخدام',
+            'color:#fff;background:#d93025;padding:4px;font-weight:bold;',
+            '', 'color:#d93025;');
+    }
+
+    // ==================== Watermarks ====================
+    function updateWatermarks() {
+        const now = new Date().toISOString().split('T')[0];
+        document.getElementById('wm1').textContent = `SafeSend Pro | ${SESSION.user} | ${SESSION.ip} | ${now}`;
+        document.getElementById('wm2').textContent = `SafeSend Pro | Session: ${SESSION.id} | Do Not Copy`;
+        
+        // Rotate watermark position every 15s
+        setInterval(() => {
+            const layer = document.getElementById('watermarkLayer');
+            const texts = layer.querySelectorAll('.watermark-text');
+            texts.forEach(t => {
+                t.style.top = Math.random() * 70 + '%';
+                t.style.left = -(Math.random() * 30) + '%';
+            });
+        }, 15000);
+    }
+
+    // ==================== Timer ====================
+    function startTimer() {
+        const bar = document.getElementById('timerBar');
+        const display = document.getElementById('timerDisplay');
+        const banner = document.getElementById('warningBanner');
+        
+        const interval = setInterval(() => {
+            if (sessionEnded) { clearInterval(interval); return; }
+            
+            timeLeft--;
+            const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const s = String(timeLeft % 60).padStart(2, '0');
+            display.textContent = `${m}:${s}`;
+            bar.style.width = (timeLeft / SESSION.duration * 100) + '%';
+            
+            if (timeLeft <= 60) {
+                bar.classList.add('warning');
+                banner.style.display = 'block';
+                setTimeout(() => { banner.style.display = 'none'; }, 5000);
+            }
+            
+            if (timeLeft <= 0) {
+                endSession();
+            }
+        }, 1000);
+    }
+
+    function endSession() {
+        sessionEnded = true;
+        document.body.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:white;flex-direction:column;text-align:center;">
+                <div style="font-size:80px;">⏰</div>
+                <h2>انتهت جلسة المعاينة</h2>
+                <p style="opacity:0.7;">لأسباب أمنية، المعاينة محدودة بالوقت</p>
+                <p style="opacity:0.7;">لشراء الملف كاملاً، يرجى إتمام الدفع</p>
+                <a href="/payment" class="btn btn-primary mt-4" style="color:white;text-decoration:none;">💳 إتمام الدفع</a>
+            </div>
+        `;
+    }
+
+    // ==================== DevTools Detection ====================
+    function startDevToolsDetection() {
+        // Method 1: window size vs screen size
+        setInterval(() => {
+            const threshold = 100;
+            const widthDiff = window.outerWidth - window.innerWidth > threshold;
+            const heightDiff = window.outerHeight - window.innerHeight > threshold;
+            
+            if (widthDiff || heightDiff) {
+                devToolsCheckCount++;
+                if (devToolsCheckCount > 3) showDevToolsWarning();
+            } else {
+                devToolsCheckCount = Math.max(0, devToolsCheckCount - 1);
+                if (devToolsCheckCount === 0) hideDevToolsWarning();
+            }
+        }, 1000);
+
+        // Method 2: Performance timing
+        const start = performance.now();
+        debugger;
+        const end = performance.now();
+        if (end - start > 100) showDevToolsWarning();
+
+        // Method 3: Console.log timing
+        const el = new Image();
+        Object.defineProperty(el, 'id', {
+            get: function() {
+                showDevToolsWarning();
+                return '';
+            }
+        });
+        console.log('%c', el);
+    }
+
+    function showDevToolsWarning() {
+        isDevToolsOpen = true;
+        document.getElementById('devtoolsWarning').style.display = 'block';
+        document.getElementById('previewContent').style.opacity = '0.3';
+    }
+
+    function hideDevToolsWarning() {
+        isDevToolsOpen = false;
+        document.getElementById('devtoolsWarning').style.display = 'none';
+        document.getElementById('previewContent').style.opacity = '1';
+    }
+
+    // ==================== Screenshot Detection ====================
+    function startScreenshotDetection() {
+        // iOS screenshot detection
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                document.getElementById('screenshotOverlay').classList.add('show');
+                setTimeout(() => {
+                    document.getElementById('screenshotOverlay').classList.remove('show');
+                }, 3000);
+            }
+        });
+
+        // Android/Pixel screenshot detection via MediaQuery
+        if (window.matchMedia) {
+            const mq = window.matchMedia('(display-mode: fullscreen)');
+            mq.addListener((e) => {
+                if (!e.matches) {
+                    document.getElementById('screenshotOverlay').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('screenshotOverlay').classList.remove('show');
+                    }, 2000);
+                }
+            });
+        }
+    }
+
+    // ==================== Screen Recording Detection ====================
+    function startRecordingDetection() {
+        if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+            // Monitor for screen capture API usage
+            const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia;
+            navigator.mediaDevices.getDisplayMedia = function() {
+                document.getElementById('screenshotOverlay').classList.add('show');
+                alert('⛔ تسجيل الشاشة غير مسموح!');
+                return Promise.reject(new Error('Screen recording blocked'));
+            };
+        }
+    }
+
+    // ==================== Tab Switch Detection ====================
+    function startTabSwitchDetection() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                document.getElementById('previewContent').style.filter = 'blur(30px)';
+            } else {
+                setTimeout(() => {
+                    document.getElementById('previewContent').style.filter = 'none';
+                }, 500);
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            document.getElementById('previewContent').style.opacity = '0.3';
+        });
+        window.addEventListener('focus', () => {
+            document.getElementById('previewContent').style.opacity = '1';
+        });
+    }
+
+    // ==================== Keyboard Shortcuts ====================
+    function disableShortcuts() {
+        document.addEventListener('keydown', function(e) {
+            const blocked = [
+                { ctrl:true, key:'s' }, { ctrl:true, key:'p' },
+                { ctrl:true, key:'c' }, { ctrl:true, key:'u' },
+                { ctrl:true, key:'j' }, { ctrl:true, key:'S' },
+                { ctrl:true, key:'P' }, { ctrl:true, key:'C' },
+                { metaKey:true, key:'s' }, { metaKey:true, key:'p' },
+                { metaKey:true, key:'c' },
+            ];
+            
+            const isBlocked = blocked.some(b => 
+                (e.ctrlKey || e.metaKey) && e.key === b.key
+            );
+            
+            if (isBlocked || e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+                (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+                (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+                e.key === 'PrintScreen') {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        });
+
+        // Prevent Print Screen via clipboard monitoring
+        window.addEventListener('copy', (e) => { e.preventDefault(); return false; });
+    }
+
+    // ==================== MutationObserver ====================
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                // Restore watermarks if removed
+                const layer = document.getElementById('watermarkLayer');
+                if (layer && layer.children.length < 3) {
+                    location.reload();
+                }
+            }
+        });
+    });
+    observer.observe(document.body, { childList:true, attributes:true, subtree:true });
+
+    // ==================== Anti-Debugging ====================
+    setInterval(() => {
+        const start = new Date().getTime();
+        debugger;
+        const end = new Date().getTime();
+        if (end - start > 100) {
+            document.body.innerHTML = '<h1 style="color:white;text-align:center;margin-top:40vh;">⛔ Debugger Detected</h1>';
+        }
+    }, 2000);
+
+    // ==================== Start ====================
+    init();
+</script>
+
+</body>
+</html>

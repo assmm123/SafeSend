@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - صفقة جديدة</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link rel="stylesheet" href="/static/css/safesend-enhanced.css">
+</head>
+<body>
+<main class="container animate-in" style="padding-top:20px;padding-bottom:80px;">
+    <h2 class="mb-4">➕ صفقة جديدة</h2>
+    
+    <div class="card">
+        <input class="input" placeholder="عنوان الصفقة">
+        <select class="input mt-2"><option>اختر الفئة</option><option>تطوير</option><option>تصميم</option><option>كتابة</option><option>تسويق</option></select>
+        <textarea class="input mt-2" rows="4" placeholder="وصف العمل المطلوب..."></textarea>
+        <div class="grid-2 mt-2">
+            <input class="input" placeholder="المبلغ (USDT)">
+            <input class="input" placeholder="مدة التسليم (أيام)">
+        </div>
+        <div class="card mt-3" style="background:var(--primary-bg);">
+            <table style="width:100%;font-size:14px;">
+                <tr><td class="text-muted">العمولة (5%)</td><td class="font-bold">25 USDT</td></tr>
+                <tr><td class="text-muted">تستلم</td><td class="font-bold" style="color:var(--success);">475 USDT</td></tr>
+            </table>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg mt-3" onclick="alert('تم إنشاء الصفقة!')">إنشاء الصفقة</button>
+    </div>
+
+    <nav class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
+        <a href="/deals/new" class="nav-item active"><span class="nav-icon">➕</span>جديد</a>
+        <a href="/notifications" class="nav-item"><span class="nav-icon">🔔</span>تنبيهات</a>
+        <a href="/profile" class="nav-item"><span class="nav-icon">👤</span>حسابي</a>
+    </nav>
+</main>
+</body>
+</html>
