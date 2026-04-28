@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - أعمالي</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="padding:20px;">
+
+<div class="container" style="padding-bottom:100px;">
+
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div class="logo-circle">S</div>
+            <div>
+                <h1 style="font-size:22px;font-weight:800;">🎨 أعمالي</h1>
+                <p style="font-size:12px;color:var(--text-muted);">معرض الأعمال السابقة</p>
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="showAddModal()">+ إضافة عمل</button>
+    </div>
+
+    <div id="portfolioGrid" class="grid-auto"></div>
+    <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
+    <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد أعمال بعد. أضف أول عمل لك!</p>
+
+    <div class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
+        <a href="/payment" class="nav-item"><span class="nav-icon">💰</span>دفع</a>
+        <a href="/notifications" class="nav-item"><span class="nav-icon">🔔</span>تنبيهات</a>
+        <a href="/profile" class="nav-item active"><span class="nav-icon">👤</span>حسابي</a>
+    </div>
+</div>
+
+<div id="addModal" class="modal-overlay" style="display:none;">
+    <div class="modal glass-card" style="max-width:420px;padding:24px;">
+        <h3>إضافة عمل جديد</h3>
+        <input class="input mt-3" id="itemTitle" placeholder="عنوان العمل">
+        <textarea class="input" id="itemDesc" placeholder="وصف العمل" rows="2"></textarea>
+        <input class="input" id="itemImage" placeholder="رابط الصورة (اختياري)">
+        <div class="grid-2 mt-3">
+            <button class="btn btn-primary btn-block" onclick="addItem()">حفظ</button>
+            <button class="btn btn-outline btn-block" onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadPortfolio() {
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const me = await fetch('/api/v1/auth/me', {headers:{'Authorization':`Bearer ${token}`}});
+        const userData = await me.json();
+        const username = userData.user?.username || 'me';
+
+        const response = await fetch(`/api/v1/users/${username}/portfolio`, {
+            headers:{'Authorization':`Bearer ${token}`}
+        });
+        const data = await response.json();
+
+        if (data.portfolio && data.portfolio.length > 0) {
+            renderPortfolio(data.portfolio);
+        } else {
+            document.getElementById('empty').style.display = 'block';
+        }
+    } catch(e) {
+        document.getElementById('empty').style.display = 'block';
+    }
+    document.getElementById('loading').style.display = 'none';
+}
+
+function renderPortfolio(items) {
+    document.getElementById('portfolioGrid').innerHTML = items.map(item => `
+        <div class="glass-card" style="position:relative;">
+            ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:12px;margin-bottom:8px;">` : ''}
+            <div style="font-weight:600;">${item.title}</div>
+            <p class="text-muted" style="font-size:11px;">${item.description || ''}</p>
+            <button class="btn btn-danger btn-sm" style="position:absolute;top:8px;left:8px;" onclick="deleteItem(${item.id})">🗑️</button>
+        </div>
+    `).join('');
+}
+
+function showAddModal() {
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('addModal').style.display = 'none';
+}
+
+async function addItem() {
+    const title = document.getElementById('itemTitle').value.trim();
+    const description = document.getElementById('itemDesc').value.trim();
+    const image_url = document.getElementById('itemImage').value.trim();
+
+    if (!title) { alert('العنوان مطلوب'); return; }
+
+    try {
+        const token = localStorage.getItem('safesend_token');
+        await fetch('/api/v1/users/portfolio', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+            body:JSON.stringify({title,description,image_url})
+        });
+        closeModal();
+        location.reload();
+    } catch(e) {
+        alert('❌ فشل الإضافة');
+    }
+}
+
+async function deleteItem(id) {
+    if (!confirm('حذف هذا العمل؟')) return;
+    try {
+        const token = localStorage.getItem('safesend_token');
+        await fetch(`/api/v1/users/portfolio/${id}`, {
+            method:'DELETE',
+            headers:{'Authorization':`Bearer ${token}`}
+        });
+        location.reload();
+    } catch(e) {}
+}
+
+loadPortfolio();
+</script>
+</body>
+</html>

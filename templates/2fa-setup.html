@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - تفعيل المصادقة الثنائية</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card" style="width:100%;max-width:420px;padding:30px;">
+    <div class="text-center mb-4">
+        <div style="font-size:45px;">🔐</div>
+        <h2 style="font-weight:800;margin-top:8px;">المصادقة الثنائية</h2>
+        <p class="text-muted mt-2">امسح رمز QR بتطبيق Google Authenticator</p>
+    </div>
+
+    <div id="qrContainer" class="text-center" style="margin:16px 0;">
+        <div id="qrLoader" style="width:180px;height:180px;margin:0 auto;background:var(--glass);border-radius:16px;display:flex;align-items:center;justify-content:center;">⏳</div>
+        <img id="qrImage" src="" style="width:180px;height:180px;display:none;border-radius:16px;">
+    </div>
+
+    <p class="text-muted text-center" style="font-size:11px;">أو أدخل المفتاح يدوياً:</p>
+    <div class="glass-card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-family:monospace;font-size:12px;">
+        <span id="secretKey" style="word-break:break-all;">---</span>
+        <button class="btn btn-ghost btn-icon" onclick="copySecret()" title="نسخ">📋</button>
+    </div>
+
+    <p class="text-center mt-4" style="font-weight:600;font-size:13px;">أدخل رمز التحقق:</p>
+    <div id="otpInputs" style="display:flex;gap:6px;justify-content:center;margin:12px 0;">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+    </div>
+
+    <div id="message" style="display:none;padding:12px;border-radius:12px;margin-top:12px;font-size:13px;"></div>
+
+    <button class="btn btn-primary btn-block mt-3" id="submitBtn" onclick="verify2FA()">
+        <span id="btnText">تفعيل</span>
+        <span id="btnLoader" style="display:none;">⏳</span>
+    </button>
+
+    <hr class="divider">
+
+    <div class="text-center">
+        <a href="/profile" style="color:var(--text-muted);font-size:13px;text-decoration:none;">العودة للإعدادات</a>
+    </div>
+</div>
+
+<script>
+let secret = '';
+
+async function init() {
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/2fa/enable', {
+            method: 'POST',
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await response.json();
+        if (data.secret) {
+            secret = data.secret;
+            document.getElementById('secretKey').textContent = data.secret;
+            document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=otpauth://totp/SafeSend?secret=${data.secret}`;
+            document.getElementById('qrLoader').style.display = 'none';
+            document.getElementById('qrImage').style.display = 'block';
+        }
+    } catch(e) {}
+}
+
+function moveNext(input) {
+    if (input.value.length === 1 && input.nextElementSibling) {
+        input.nextElementSibling.focus();
+    }
+}
+
+function getOTP() {
+    let code = '';
+    document.querySelectorAll('.otp-box').forEach(box => code += box.value);
+    return code;
+}
+
+function copySecret() {
+    navigator.clipboard.writeText(secret);
+    showMessage('success', '✅ تم نسخ المفتاح');
+}
+
+async function verify2FA() {
+    const code = getOTP();
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('message');
+    const btnText = document.getElementById('btnText');
+    const btnLoader = document.getElementById('btnLoader');
+
+    if (code.length !== 6) { showMessage('error', '❌ أدخل رمز التحقق المكون من 6 أرقام'); return; }
+
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoader.style.display = 'inline';
+
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/2fa/verify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify({code: code})
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            showMessage('success', '✅ تم تفعيل المصادقة الثنائية بنجاح');
+            if (data.backup_codes) {
+                localStorage.setItem('backup_codes', JSON.stringify(data.backup_codes));
+                setTimeout(() => { window.location.href = '/backup-codes'; }, 1500);
+            }
+        } else {
+            showMessage('error', data.message_ar || '❌ رمز التحقق غير صحيح');
+        }
+    } catch(e) {
+        showMessage('error', '❌ خطأ في الاتصال');
+    }
+
+    btn.disabled = false;
+    btnText.style.display = 'inline';
+    btnLoader.style.display = 'none';
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('message');
+    msg.style.display = 'block';
+    msg.textContent = text;
+    msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
+    msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
+    msg.style.border = `1px solid ${type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)'}`;
+}
+
+init();
+</script>
+</body>
+</html>

@@ -30,3 +30,31 @@
 2026-04-26 23:48:02.006 +03 [12499] HINT:  Is another postmaster (PID 17807) running in data directory "/data/data/com.termux/files/home/Safe1/data/pgdata"?
 2026-04-26 23:48:02.146 +03 [12501] ERROR:  database "safesend" already exists
 2026-04-26 23:48:02.146 +03 [12501] STATEMENT:  CREATE DATABASE safesend;
+2026-04-27 22:50:42.605 +03 [21068] LOG:  starting PostgreSQL 18.2 on aarch64-unknown-linux-android, compiled by Android (13989888, +pgo, +bolt, +lto, +mlgo, based on r563880c) clang version 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 5e96669f06077099aa41290cdb4c5e6fa0f59349), 64-bit
+2026-04-27 22:50:42.607 +03 [21068] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-04-27 22:50:42.612 +03 [21068] LOG:  listening on Unix socket "/data/data/com.termux/files/usr/tmp/.s.PGSQL.5432"
+2026-04-27 22:50:42.629 +03 [21076] LOG:  database system was interrupted; last known up at 2026-04-26 21:15:23 +03
+2026-04-27 22:50:43.182 +03 [21076] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-04-27 22:50:43.190 +03 [21076] LOG:  redo starts at 0/1BE11B8
+2026-04-27 22:50:43.190 +03 [21076] LOG:  invalid record length at 0/1BE12C0: expected at least 24, got 0
+2026-04-27 22:50:43.190 +03 [21076] LOG:  redo done at 0/1BE1288 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-04-27 22:50:43.225 +03 [21074] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-04-27 22:50:43.267 +03 [21074] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.023 s, sync=0.002 s, total=0.043 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/1BE12C0, redo lsn=0/1BE12C0
+2026-04-27 22:50:43.274 +03 [21068] LOG:  database system is ready to accept connections
+2026-04-27 23:40:12.503 +03 [17997] FATAL:  database "u0_a951" does not exist
+2026-04-28 00:13:26.526 +03 [10893] FATAL:  lock file "postmaster.pid" already exists
+2026-04-28 00:13:26.526 +03 [10893] HINT:  Is another postmaster (PID 21068) running in data directory "/data/data/com.termux/files/home/Safe1/data/pgdata"?
+2026-04-28 00:23:07.277 +03 [14292] FATAL:  database "u0_a951" does not exist
+2026-04-28 00:35:45.347 +03 [21074] LOG:  checkpoint starting: time
+2026-04-28 00:35:49.666 +03 [21074] LOG:  checkpoint complete: wrote 41 buffers (0.3%), wrote 1 SLRU buffers; 1 WAL file(s) added, 0 removed, 0 recycled; write=4.139 s, sync=0.030 s, total=4.319 s; sync files=37, longest=0.009 s, average=0.001 s; distance=167 kB, estimate=167 kB; lsn=0/1C0B168, redo lsn=0/1C0B0D8
+2026-04-28 00:54:32.253 +03 [26857] FATAL:  database "u0_a951" does not exist
+2026-04-28 00:55:46.063 +03 [21074] LOG:  checkpoint starting: time
+2026-04-28 00:55:46.535 +03 [21074] LOG:  checkpoint complete: wrote 4 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.422 s, sync=0.007 s, total=0.473 s; sync files=4, longest=0.003 s, average=0.002 s; distance=18 kB, estimate=152 kB; lsn=0/1C0F990, redo lsn=0/1C0F938
+2026-04-28 01:13:07.369 +03 [13508] FATAL:  database "u0_a951" does not exist
+2026-04-28 01:15:46.871 +03 [21074] LOG:  checkpoint starting: time
+2026-04-28 01:15:47.985 +03 [21074] LOG:  checkpoint complete: wrote 10 buffers (0.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=1.028 s, sync=0.011 s, total=1.115 s; sync files=9, longest=0.006 s, average=0.002 s; distance=10 kB, estimate=138 kB; lsn=0/1C123D8, redo lsn=0/1C12380
+2026-04-28 01:20:47.083 +03 [21074] LOG:  checkpoint starting: time
+2026-04-28 01:20:47.526 +03 [21074] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.310 s, sync=0.010 s, total=0.444 s; sync files=4, longest=0.007 s, average=0.003 s; distance=1 kB, estimate=124 kB; lsn=0/1C12938, redo lsn=0/1C128E0
+2026-04-28 01:22:35.623 +03 [17532] FATAL:  database "u0_a951" does not exist
+2026-04-28 01:25:47.628 +03 [21074] LOG:  checkpoint starting: time
+2026-04-28 01:25:48.043 +03 [21074] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.307 s, sync=0.011 s, total=0.415 s; sync files=4, longest=0.009 s, average=0.003 s; distance=1 kB, estimate=112 kB; lsn=0/1C12F88, redo lsn=0/1C12F30

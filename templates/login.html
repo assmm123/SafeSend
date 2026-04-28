@@ -1,32 +1,28 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SafeSend - دخول</title>
-    <link rel="stylesheet" href="/static/css/safesend.css">
-    <link rel="stylesheet" href="/static/css/safesend-enhanced.css">
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        .auth-page { min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); }
-        .auth-card { background:var(--surface); border-radius:20px; padding:40px; width:100%; max-width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
-    </style>
+<!DOCTYPE html><html lang="ar" dir="rtl" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SafeSend - دخول</title>
+<link rel="stylesheet" href="/static/css/safesend.css">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
-<div class="auth-page">
-    <div class="auth-card">
-        <div style="text-align:center;margin-bottom:30px;">
-            <span class="icon-2xl">🛡️</span>
-            <h2 style="margin-top:12px;">SafeSend</h2>
-            <p class="text-muted">منصة الوساطة الآمنة</p>
-        </div>
-        <div class="input-group"><span class="input-icon">📧</span><input class="input" placeholder="البريد الإلكتروني"></div>
-        <div class="input-group"><span class="input-icon">🔒</span><input class="input" type="password" placeholder="كلمة المرور"></div>
-        <a href="/dashboard" class="btn btn-primary btn-block mt-4" style="text-decoration:none;">تسجيل الدخول</a>
-        <div style="text-align:center;margin-top:20px;font-size:14px;">
-            <a href="/register">إنشاء حساب</a> | <a href="/dashboard">تخطي</a>
-        </div>
-    </div>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+<div class="glass-card" style="width:100%;max-width:400px;padding:30px;">
+<div class="text-center mb-4"><div style="font-size:50px;">🛡️</div><h2>SafeSend</h2><p class="text-muted">منصة الوساطة الآمنة</p></div>
+<div class="input-group"><span class="input-icon">📧</span><input class="input" id="email" placeholder="البريد الإلكتروني"></div>
+<div class="input-group"><span class="input-icon">🔒</span><input class="input" type="password" id="password" placeholder="كلمة المرور"></div>
+<div id="msg" style="display:none;padding:12px;border-radius:12px;margin:12px 0;font-size:13px;"></div>
+<button class="btn btn-primary btn-block mt-3" onclick="login()">تسجيل الدخول</button>
+<hr class="divider">
+<div class="text-center"><p style="font-size:12px;">ليس لديك حساب؟ <a href="/register" style="color:var(--primary);">سجل الآن</a></p></div>
 </div>
-</body>
-</html>
+<script>
+async function login(){
+const e=document.getElementById('email').value,p=document.getElementById('password').value,m=document.getElementById('msg');
+if(!e||!p){m.style.display='block';m.textContent='❌ املأ جميع الحقول';m.style.background='rgba(255,75,106,0.12)';m.style.color='var(--danger)';return;}
+try{
+const r=await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})});
+const d=await r.json();
+if(r.ok){localStorage.setItem('safesend_token',d.access_token);window.location.href='/dashboard';}
+else{m.style.display='block';m.textContent='❌ '+(d.message_ar||'بيانات خاطئة');m.style.background='rgba(255,75,106,0.12)';m.style.color='var(--danger)';}
+}catch(x){}
+}
+</script>
+</body></html>

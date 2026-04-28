@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - إيصال الدفع</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card" style="width:100%;max-width:420px;padding:30px;">
+    <div class="text-center mb-4">
+        <div style="font-size:45px;">🛡️</div>
+        <h2 style="font-weight:800;margin-top:8px;">SafeSend</h2>
+        <p style="font-size:13px;color:var(--text-muted);">إيصال دفع رسمي</p>
+    </div>
+
+    <hr class="divider">
+
+    <table class="table" style="width:100%;">
+        <tr><td class="text-muted">رقم الإيصال</td><td id="receiptNumber" style="font-weight:600;">---</td></tr>
+        <tr><td class="text-muted">التاريخ</td><td id="receiptDate">---</td></tr>
+        <tr><td class="text-muted">المبلغ</td><td id="receiptAmount" style="font-weight:700;">---</td></tr>
+        <tr><td class="text-muted">العمولة</td><td id="receiptFee">---</td></tr>
+        <tr><td class="text-muted">الصافي</td><td id="receiptNet" style="font-weight:700;color:var(--accent);">---</td></tr>
+        <tr><td class="text-muted">رقم المعاملة</td><td id="receiptTx" style="font-size:10px;word-break:break-all;">---</td></tr>
+    </table>
+
+    <hr class="divider">
+
+    <div class="grid-2" style="gap:8px;">
+        <button class="btn btn-primary btn-block" onclick="downloadPDF()">📥 تحميل PDF</button>
+        <button class="btn btn-outline btn-block" onclick="shareReceipt()">📤 مشاركة</button>
+    </div>
+
+    <div id="message" style="display:none;padding:12px;border-radius:12px;margin-top:12px;font-size:13px;"></div>
+
+    <div class="text-center mt-3">
+        <a href="/payment-history" style="color:var(--text-muted);font-size:13px;text-decoration:none;">العودة لسجل المدفوعات</a>
+    </div>
+</div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const dealUuid = urlParams.get('uuid');
+const txHash = urlParams.get('tx');
+
+async function loadReceipt() {
+    if (!dealUuid) {
+        document.getElementById('receiptNumber').textContent = '❌ معرف الصفقة مفقود';
+        return;
+    }
+
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch(`/api/v1/payments/${dealUuid}/receipt`, {
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await response.json();
+
+        if (data.receipt) {
+            document.getElementById('receiptNumber').textContent = 'REC-' + dealUuid.substring(0,8).toUpperCase();
+            document.getElementById('receiptDate').textContent = data.receipt.date || '---';
+            document.getElementById('receiptAmount').textContent = (data.receipt.amount || 0) + ' USDT';
+            document.getElementById('receiptFee').textContent = (data.receipt.fee || 0) + ' USDT';
+            document.getElementById('receiptNet').textContent = (data.receipt.net || data.receipt.amount || 0) + ' USDT';
+            document.getElementById('receiptTx').textContent = data.receipt.tx_hash || txHash || '---';
+        }
+    } catch(e) {
+        document.getElementById('receiptNumber').textContent = '❌ خطأ في التحميل';
+    }
+}
+
+function downloadPDF() {
+    if (!dealUuid) return;
+    window.open(`/api/v1/payments/${dealUuid}/receipt`, '_blank');
+}
+
+function shareReceipt() {
+    const amount = document.getElementById('receiptAmount').textContent;
+    if (navigator.share) {
+        navigator.share({title: 'إيصال دفع SafeSend', text: `إيصال دفع SafeSend - ${amount}`, url: window.location.href});
+    } else {
+        navigator.clipboard.writeText(window.location.href);
+        showMessage('success', '✅ تم نسخ الرابط');
+    }
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('message');
+    msg.style.display = 'block';
+    msg.textContent = text;
+    msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
+    msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
+}
+
+loadReceipt();
+</script>
+</body>
+</html>

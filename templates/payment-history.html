@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - سجل المدفوعات</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="padding:20px;">
+
+<div class="container" style="padding-bottom:100px;">
+
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div class="logo-circle">S</div>
+            <div>
+                <h1 style="font-size:22px;font-weight:800;">سجل المدفوعات</h1>
+                <p style="font-size:12px;color:var(--text-muted);">جميع معاملاتي المالية</p>
+            </div>
+        </div>
+    </div>
+
+    <input class="input" type="text" id="searchInput" placeholder="🔍 بحث في المدفوعات..." oninput="filterPayments()">
+
+    <div style="display:flex;gap:8px;margin:12px 0;">
+        <div class="chip chip-primary" onclick="filterByType('all')" id="chipAll">الكل</div>
+        <div class="chip" onclick="filterByType('received')" id="chipReceived">📥 وارد</div>
+        <div class="chip" onclick="filterByType('sent')" id="chipSent">📤 صادر</div>
+    </div>
+
+    <div id="paymentsList"></div>
+    <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
+    <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد مدفوعات</p>
+
+    <button id="loadMore" class="btn btn-outline btn-block mt-3" style="display:none;" onclick="loadMore()">تحميل المزيد</button>
+
+    <div class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
+        <a href="/payment" class="nav-item"><span class="nav-icon">💰</span>دفع</a>
+        <a href="/notifications" class="nav-item"><span class="nav-icon">🔔</span>تنبيهات</a>
+        <a href="/profile" class="nav-item"><span class="nav-icon">👤</span>حسابي</a>
+    </div>
+</div>
+
+<script>
+let allPayments = [];
+let filteredPayments = [];
+let currentFilter = 'all';
+let page = 1;
+
+async function loadPayments() {
+    document.getElementById('loading').style.display = 'block';
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch(`/api/v1/payments/history?page=${page}`, {
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await response.json();
+        
+        if (data.payments && data.payments.length > 0) {
+            allPayments = [...allPayments, ...data.payments];
+            filterPayments();
+            if (data.pagination && data.pagination.has_next) {
+                document.getElementById('loadMore').style.display = 'block';
+            } else {
+                document.getElementById('loadMore').style.display = 'none';
+            }
+        } else {
+            document.getElementById('empty').style.display = 'block';
+        }
+    } catch(e) {
+        document.getElementById('empty').style.display = 'block';
+    }
+    document.getElementById('loading').style.display = 'none';
+}
+
+function filterPayments() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    filteredPayments = allPayments.filter(p => {
+        const matchesSearch = !query || 
+            (p.deal_title && p.deal_title.toLowerCase().includes(query)) ||
+            (p.tx_hash && p.tx_hash.toLowerCase().includes(query));
+        const matchesFilter = currentFilter === 'all' || 
+            (currentFilter === 'received' && p.amount > 0) ||
+            (currentFilter === 'sent' && p.amount < 0);
+        return matchesSearch && matchesFilter;
+    });
+    renderPayments();
+}
+
+function filterByType(type) {
+    currentFilter = type;
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip-primary'));
+    document.getElementById(`chip${type.charAt(0).toUpperCase()+type.slice(1)}`).classList.add('chip-primary');
+    filterPayments();
+}
+
+function renderPayments() {
+    const list = document.getElementById('paymentsList');
+    if (!filteredPayments.length) {
+        document.getElementById('empty').style.display = 'block';
+        list.innerHTML = '';
+        return;
+    }
+    document.getElementById('empty').style.display = 'none';
+    
+    list.innerHTML = filteredPayments.map(p => `
+        <div class="glass-card" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-weight:600;font-size:13px;">${p.deal_title || 'معاملة'}</div>
+                <div class="text-muted">${p.created_at ? new Date(p.created_at).toLocaleDateString('ar-SA') : ''}</div>
+                <span class="badge ${p.status === 'confirmed' ? 'badge-success' : p.status === 'pending' ? 'badge-warning' : 'badge-danger'}">${p.status === 'confirmed' ? 'مكتمل' : p.status === 'pending' ? 'معلق' : 'ملغي'}</span>
+            </div>
+            <div style="font-weight:800;font-size:16px;color:${p.amount > 0 ? 'var(--accent)' : 'var(--danger)'};">
+                ${p.amount > 0 ? '+' : ''}${p.amount} USDT
+            </div>
+        </div>
+    `).join('');
+}
+
+function loadMore() {
+    page++;
+    loadPayments();
+}
+
+loadPayments();
+</script>
+</body>
+</html>

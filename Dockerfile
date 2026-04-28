@@ -1,4 +1,3 @@
-# SafeSend Escrow - Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -8,9 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 5000
+EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
-
-CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]

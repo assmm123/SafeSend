@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - رموز احتياطية</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card" style="width:100%;max-width:460px;padding:30px;">
+    <div class="text-center mb-4">
+        <div style="font-size:45px;">⚠️</div>
+        <h2 style="font-weight:800;margin-top:8px;">رموز احتياطية</h2>
+        <p class="text-muted mt-2">احفظ هذه الرموز في مكان آمن. كل رمز يستخدم مرة واحدة فقط.</p>
+    </div>
+
+    <div id="codesGrid" class="grid-2" style="gap:10px;"></div>
+    <p id="emptyMessage" class="text-center text-muted" style="display:none;padding:20px;">لا توجد رموز احتياطية</p>
+
+    <div id="message" style="display:none;padding:12px;border-radius:12px;margin-top:12px;font-size:13px;"></div>
+
+    <div class="grid-2 mt-4" style="gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="copyAll()">📋 نسخ الكل</button>
+        <button class="btn btn-outline btn-sm" onclick="downloadCodes()">📥 تحميل TXT</button>
+    </div>
+
+    <button class="btn btn-primary btn-block mt-3" onclick="regenerateCodes()">🔄 توليد رموز جديدة</button>
+
+    <div class="text-center mt-3">
+        <a href="/profile" style="color:var(--text-muted);font-size:13px;text-decoration:none;">العودة للإعدادات</a>
+    </div>
+</div>
+
+<script>
+let codes = [];
+
+function loadCodes() {
+    const saved = localStorage.getItem('backup_codes');
+    if (saved) {
+        codes = JSON.parse(saved);
+        renderCodes();
+    } else {
+        fetchCodesFromAPI();
+    }
+}
+
+async function fetchCodesFromAPI() {
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/2fa/backup', {
+            method: 'POST',
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await response.json();
+        if (data.backup_codes) {
+            codes = data.backup_codes;
+            localStorage.setItem('backup_codes', JSON.stringify(codes));
+            renderCodes();
+        }
+    } catch(e) {
+        document.getElementById('emptyMessage').style.display = 'block';
+    }
+}
+
+function renderCodes() {
+    const grid = document.getElementById('codesGrid');
+    if (!codes.length) {
+        document.getElementById('emptyMessage').style.display = 'block';
+        return;
+    }
+    grid.innerHTML = codes.map((code, i) => `
+        <div class="glass-card text-center" style="font-family:monospace;font-size:16px;font-weight:700;letter-spacing:2px;padding:12px;">
+            ${code}
+            <div style="font-size:9px;color:var(--text-muted);margin-top:4px;">الرمز ${i+1}</div>
+        </div>
+    `).join('');
+}
+
+function copyAll() {
+    if (!codes.length) return;
+    navigator.clipboard.writeText(codes.join('\n'));
+    showMessage('success', '✅ تم نسخ جميع الرموز');
+}
+
+function downloadCodes() {
+    if (!codes.length) return;
+    const blob = new Blob([codes.join('\n')], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'safesend-backup-codes.txt';
+    a.click();
+    showMessage('success', '✅ تم التحميل');
+}
+
+async function regenerateCodes() {
+    if (!confirm('سيتم إلغاء الرموز القديمة. متابعة؟')) return;
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/2fa/backup', {
+            method: 'POST',
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await response.json();
+        if (data.backup_codes) {
+            codes = data.backup_codes;
+            localStorage.setItem('backup_codes', JSON.stringify(codes));
+            renderCodes();
+            showMessage('success', '✅ تم توليد رموز جديدة');
+        }
+    } catch(e) {
+        showMessage('error', '❌ فشل توليد الرموز');
+    }
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('message');
+    msg.style.display = 'block';
+    msg.textContent = text;
+    msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
+    msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
+    msg.style.border = `1px solid ${type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)'}`;
+}
+
+loadCodes();
+</script>
+</body>
+</html>

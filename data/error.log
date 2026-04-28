@@ -1,0 +1,45 @@
+[2026-04-27 20:16:54 +0300] [1869] [INFO] Starting gunicorn 25.3.0
+[2026-04-27 20:16:54 +0300] [1869] [INFO] Listening at: http://0.0.0.0:8000 (1869)
+[2026-04-27 20:16:54 +0300] [1869] [INFO] Using worker: sync
+[2026-04-27 20:16:54 +0300] [1993] [INFO] Booting worker with pid: 1993
+[2026-04-27 20:16:54 +0300] [1994] [INFO] Booting worker with pid: 1994
+[2026-04-27 20:16:54 +0300] [2039] [INFO] Booting worker with pid: 2039
+[2026-04-27 20:16:54 +0300] [2053] [INFO] Booting worker with pid: 2053
+[2026-04-27 20:16:54 +0300] [1869] [INFO] Control socket listening at /data/data/com.termux/files/home/.gunicorn/gunicorn.ctl
+[2026-04-27 22:52:12 +0300] [1869] [CRITICAL] WORKER TIMEOUT (pid:2053)
+[2026-04-27 22:52:12 +0300] [2053] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/workers/sync.py", line 141, in handle
+    req = next(parser)
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/parser.py", line 56, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/message.py", line 410, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/message.py", line 184, in __init__
+    unused = self.parse(self.unreader)
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/message.py", line 422, in parse
+    self.read_into(unreader, buf, stop=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/message.py", line 558, in read_into
+    data = unreader.read()
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/http/unreader.py", line 65, in chunk
+    return self.sock.recv(self.mxchunk)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/gunicorn/workers/base.py", line 198, in handle_abort
+    sys.exit(1)
+    ~~~~~~~~^^^
+SystemExit: 1
+[2026-04-27 22:52:12 +0300] [2053] [INFO] Worker exiting (pid: 2053)
+[2026-04-27 22:52:13 +0300] [1869] [ERROR] Worker (pid:2053) was sent SIGKILL! Perhaps out of memory?
+[2026-04-27 22:52:13 +0300] [21594] [INFO] Booting worker with pid: 21594
+[2026-04-27 22:52:13 +0300] [1869] [INFO] Control socket listening at /data/data/com.termux/files/home/.gunicorn/gunicorn.ctl
+[2026-04-28 00:13:24 +0300] [1994] [INFO] Worker exiting (pid: 1994)
+[2026-04-28 00:13:24 +0300] [1993] [INFO] Worker exiting (pid: 1993)
+[2026-04-28 00:13:24 +0300] [21594] [INFO] Worker exiting (pid: 21594)
+[2026-04-28 00:13:24 +0300] [1869] [INFO] Handling signal: term
+[2026-04-28 00:13:24 +0300] [2039] [INFO] Worker exiting (pid: 2039)
+[2026-04-28 00:13:26 +0300] [1869] [INFO] Shutting down: Master

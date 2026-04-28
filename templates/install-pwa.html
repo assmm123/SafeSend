@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - تثبيت التطبيق</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .feature-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-glass); }
+        .feature-icon { font-size:28px; width:40px; text-align:center; }
+    </style>
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card" style="width:100%;max-width:440px;padding:30px;">
+    <div class="text-center mb-4">
+        <div style="font-size:65px;">🛡️</div>
+        <h2 style="font-weight:800;margin-top:8px;">SafeSend</h2>
+        <p class="text-muted mt-2">ثبّت التطبيق على جهازك للوصول السريع</p>
+    </div>
+
+    <div class="feature-item">
+        <span class="feature-icon">⚡</span>
+        <div><span style="font-weight:600;">وصول سريع</span><p class="text-muted" style="font-size:11px;">افتح التطبيق مباشرة من الشاشة الرئيسية بدون متصفح</p></div>
+    </div>
+    <div class="feature-item">
+        <span class="feature-icon">🔔</span>
+        <div><span style="font-weight:600;">إشعارات فورية</span><p class="text-muted" style="font-size:11px;">استلم تنبيهات الصفقات والمدفوعات فوراً</p></div>
+    </div>
+    <div class="feature-item">
+        <span class="feature-icon">📡</span>
+        <div><span style="font-weight:600;">عمل بدون إنترنت</span><p class="text-muted" style="font-size:11px;">تصفح صفقاتك ورسائلك حتى بدون اتصال</p></div>
+    </div>
+
+    <button id="installBtn" class="btn btn-primary btn-block btn-lg mt-4" style="display:none;" onclick="installApp()">
+        📲 تثبيت التطبيق
+    </button>
+
+    <div id="manualInstructions" style="display:none;margin-top:16px;">
+        <p class="text-muted text-center">التثبيت غير مدعوم في متصفحك. جرب:</p>
+        <p class="text-muted text-center">Chrome: ⋮ → "تثبيت التطبيق"</p>
+        <p class="text-muted text-center">Safari: ⎋ → "إضافة إلى الشاشة الرئيسية"</p>
+    </div>
+
+    <div id="message" style="display:none;padding:12px;border-radius:12px;margin-top:12px;font-size:13px;"></div>
+
+    <div class="text-center mt-3">
+        <a href="/dashboard" style="color:var(--text-muted);font-size:13px;text-decoration:none;">تخطي والذهاب للتطبيق</a>
+    </div>
+</div>
+
+<script>
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('installBtn').style.display = 'block';
+});
+
+window.addEventListener('appinstalled', () => {
+    document.getElementById('installBtn').style.display = 'none';
+    showMessage('success', '✅ تم تثبيت التطبيق بنجاح!');
+    setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+});
+
+function installApp() {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((result) => {
+            if (result.outcome === 'accepted') {
+                showMessage('success', '✅ جاري التثبيت...');
+            }
+            deferredPrompt = null;
+        });
+    } else {
+        document.getElementById('manualInstructions').style.display = 'block';
+    }
+}
+
+// Show manual instructions if PWA not supported
+setTimeout(() => {
+    if (!deferredPrompt && !document.getElementById('installBtn').style.display === 'block') {
+        document.getElementById('manualInstructions').style.display = 'block';
+    }
+}, 2000);
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js');
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('message');
+    msg.style.display = 'block';
+    msg.textContent = text;
+    msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
+    msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
+    msg.style.border = `1px solid ${type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)'}`;
+}
+</script>
+</body>
+</html>

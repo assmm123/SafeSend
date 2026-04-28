@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - تقييماتي</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="padding:20px;">
+
+<div class="container" style="padding-bottom:100px;">
+
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div class="logo-circle">S</div>
+            <div>
+                <h1 style="font-size:22px;font-weight:800;">⭐ تقييماتي</h1>
+                <p style="font-size:12px;color:var(--text-muted);">جميع التقييمات التي تلقيتها</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="summary" class="glass-card text-center" style="padding:20px;">
+        <div style="font-size:48px;font-weight:900;color:var(--primary);" id="avgRating">---</div>
+        <div style="font-size:24px;" id="starsDisplay"></div>
+        <p class="text-muted mt-2"><span id="totalReviews">0</span> تقييم</p>
+    </div>
+
+    <div class="glass-card mt-3" id="breakdownCard">
+        <p style="font-weight:600;font-size:13px;margin-bottom:8px;">توزيع التقييمات</p>
+        <div id="breakdown"></div>
+    </div>
+
+    <div id="reviewsList" style="margin-top:12px;"></div>
+    <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
+    <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد تقييمات بعد</p>
+
+    <div class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
+        <a href="/payment" class="nav-item"><span class="nav-icon">💰</span>دفع</a>
+        <a href="/notifications" class="nav-item"><span class="nav-icon">🔔</span>تنبيهات</a>
+        <a href="/profile" class="nav-item"><span class="nav-icon">👤</span>حسابي</a>
+    </div>
+</div>
+
+<script>
+async function loadReviews() {
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/me', {
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const userData = await response.json();
+        const username = userData.user?.username || 'me';
+
+        const reviewsResponse = await fetch(`/api/v1/users/${username}/reviews`, {
+            headers: {'Authorization': `Bearer ${token}`}
+        });
+        const data = await reviewsResponse.json();
+
+        if (data.reviews && data.reviews.length > 0) {
+            renderSummary(data);
+            renderBreakdown(data.reviews);
+            renderReviews(data.reviews);
+        } else {
+            document.getElementById('empty').style.display = 'block';
+        }
+    } catch(e) {
+        document.getElementById('empty').style.display = 'block';
+    }
+    document.getElementById('loading').style.display = 'none';
+}
+
+function renderSummary(data) {
+    const avg = data.average_rating || 0;
+    const total = data.total || data.reviews.length;
+    
+    document.getElementById('avgRating').textContent = avg.toFixed(1);
+    document.getElementById('starsDisplay').textContent = '⭐'.repeat(Math.round(avg));
+    document.getElementById('totalReviews').textContent = total;
+}
+
+function renderBreakdown(reviews) {
+    const dist = [0,0,0,0,0];
+    reviews.forEach(r => {
+        const overall = (r.communication_rating + r.quality_rating + r.speed_rating + r.accuracy_rating) / 4;
+        const star = Math.round(overall);
+        if (star >= 1 && star <= 5) dist[star-1]++;
+    });
+    const total = reviews.length;
+    
+    document.getElementById('breakdown').innerHTML = [5,4,3,2,1].map(star => {
+        const count = dist[star-1];
+        const pct = total > 0 ? (count/total*100) : 0;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-size:11px;width:20px;">${star}⭐</span>
+            <div class="progress" style="flex:1;"><div class="progress-bar" style="width:${pct}%;"></div></div>
+            <span style="font-size:10px;color:var(--text-muted);width:30px;">${count}</span>
+        </div>`;
+    }).join('');
+}
+
+function renderReviews(reviews) {
+    document.getElementById('reviewsList').innerHTML = reviews.map(r => {
+        const overall = ((r.communication_rating + r.quality_rating + r.speed_rating + r.accuracy_rating) / 4).toFixed(1);
+        return `<div class="glass-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-weight:600;">${r.reviewer_name || 'مستخدم'}</span>
+                <span>${'⭐'.repeat(Math.round(overall))} ${overall}</span>
+            </div>
+            <p class="text-muted mt-1">${r.comment || ''}</p>
+            <p class="text-muted" style="font-size:10px;">${r.created_at ? new Date(r.created_at).toLocaleDateString('ar-SA') : ''}</p>
+        </div>`;
+    }).join('');
+}
+
+loadReviews();
+</script>
+</body>
+</html>

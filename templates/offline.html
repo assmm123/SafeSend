@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - غير متصل</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card text-center" style="width:100%;max-width:420px;padding:40px;">
+    <div style="font-size:70px;margin-bottom:16px;">📡</div>
+    <h2 style="font-weight:800;">غير متصل بالإنترنت</h2>
+    <p class="text-muted mt-3">أنت غير متصل حالياً. سيتم مزامنة البيانات عند عودة الاتصال.</p>
+
+    <div id="cachedPages" style="margin-top:20px;text-align:right;">
+        <p style="font-weight:600;font-size:13px;margin-bottom:8px;">📄 صفحات متاحة:</p>
+        <div id="pageList" class="text-muted" style="font-size:12px;"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block mt-4" onclick="retry()">🔄 إعادة المحاولة</button>
+
+    <p id="reconnectMsg" style="display:none;color:var(--accent);margin-top:12px;font-size:13px;">✅ تم استعادة الاتصال! جاري التحويل...</p>
+</div>
+
+<script>
+function retry() {
+    if (navigator.onLine) {
+        document.getElementById('reconnectMsg').style.display = 'block';
+        setTimeout(() => { window.location.href = '/dashboard'; }, 1000);
+    } else {
+        alert('❌ ما زلت غير متصل. تأكد من اتصالك بالإنترنت.');
+    }
+}
+
+window.addEventListener('online', () => {
+    document.getElementById('reconnectMsg').style.display = 'block';
+    setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+});
+
+// Show available cached pages
+if ('caches' in window) {
+    caches.open('safesend-v1').then(cache => {
+        cache.keys().then(keys => {
+            const pages = keys.map(k => k.url.split('/').pop()).filter(p => p);
+            const list = document.getElementById('pageList');
+            if (pages.length) {
+                list.innerHTML = pages.map(p => `<div>📎 ${p}</div>`).join('');
+            } else {
+                list.innerHTML = '<div>لا توجد صفحات مخزنة</div>';
+            }
+        });
+    });
+}
+</script>
+</body>
+</html>

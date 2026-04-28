@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSend - التحقق بخطوتين</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+
+<div class="glass-card" style="width:100%;max-width:420px;padding:30px;">
+    <div class="text-center mb-4">
+        <div style="font-size:45px;">🔒</div>
+        <h2 style="font-weight:800;margin-top:8px;">التحقق بخطوتين</h2>
+        <p class="text-muted mt-2">أدخل رمز المصادقة من تطبيق Google Authenticator</p>
+    </div>
+
+    <div id="otpInputs" style="display:flex;gap:6px;justify-content:center;margin:16px 0;">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+        <input type="text" maxlength="1" class="otp-box" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border-glass);border-radius:10px;background:var(--glass);color:var(--text);font-family:Tajawal;" oninput="moveNext(this)">
+    </div>
+
+    <div id="message" style="display:none;padding:12px;border-radius:12px;margin-top:12px;font-size:13px;"></div>
+
+    <button class="btn btn-primary btn-block mt-3" id="submitBtn" onclick="verify()">
+        <span id="btnText">تحقق</span>
+        <span id="btnLoader" style="display:none;">⏳</span>
+    </button>
+
+    <div class="text-center mt-3">
+        <a href="/backup-codes" style="color:var(--primary);font-size:12px;text-decoration:none;">استخدم رمزاً احتياطياً</a>
+    </div>
+</div>
+
+<script>
+function moveNext(input) {
+    if (input.value.length === 1 && input.nextElementSibling) {
+        input.nextElementSibling.focus();
+    }
+    if (input.value.length === 1 && !input.nextElementSibling) {
+        verify();
+    }
+}
+
+function getOTP() {
+    let code = '';
+    document.querySelectorAll('.otp-box').forEach(box => code += box.value);
+    return code;
+}
+
+async function verify() {
+    const code = getOTP();
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('message');
+    const btnText = document.getElementById('btnText');
+    const btnLoader = document.getElementById('btnLoader');
+
+    if (code.length !== 6) { showMessage('error', '❌ أدخل رمز التحقق المكون من 6 أرقام'); return; }
+
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoader.style.display = 'inline';
+
+    try {
+        const token = localStorage.getItem('safesend_token');
+        const response = await fetch('/api/v1/auth/2fa/verify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify({code: code})
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            window.location.href = '/dashboard';
+        } else {
+            showMessage('error', data.message_ar || '❌ رمز التحقق غير صحيح');
+        }
+    } catch(e) {
+        showMessage('error', '❌ خطأ في الاتصال');
+    }
+
+    btn.disabled = false;
+    btnText.style.display = 'inline';
+    btnLoader.style.display = 'none';
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('message');
+    msg.style.display = 'block';
+    msg.textContent = text;
+    msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
+    msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
+    msg.style.border = `1px solid ${type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)'}`;
+}
+</script>
+</body>
+</html>
