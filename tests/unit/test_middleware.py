@@ -17,7 +17,7 @@ from src.api.middleware import (
     after_request_handler,
     teardown_request_handler,
     rate_limit_exceeded_handler,
-    rate_limit_by_user_middleware,
+    limiter,
     cors_middleware
 )
 
@@ -114,19 +114,19 @@ class TestRateLimitExceeded:
             assert 'error' in response[0].json
 
 class TestRateLimitByUser:
-    """Tests for rate_limit_by_user_middleware."""
+    """Tests for limiter."""
     
     def test_anonymous_user_returns_none(self, app):
         """Verify that anonymous user check returns None."""
         with app.test_request_context('/'):
-            result = rate_limit_by_user_middleware()
+            result = limiter()
             assert result is None
     
     def test_admin_user_returns_none(self, app):
         """Verify that admin user check returns None."""
         with app.test_request_context('/'):
             g.user_role = 'admin'
-            result = rate_limit_by_user_middleware()
+            result = limiter()
             assert result is None
 
 class TestCorsMiddleware:

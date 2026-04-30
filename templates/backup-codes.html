@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -34,95 +34,192 @@
 </div>
 
 <script>
+// ============================================
+// التهيئة - احترام ثيم المستخدم
+// ============================================
+(function() {
+    const theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+})();
+
+// ============================================
+// المتغيرات
+// ============================================
 let codes = [];
 
-function loadCodes() {
-    const saved = localStorage.getItem('backup_codes');
-    if (saved) {
-        codes = JSON.parse(saved);
-        renderCodes();
-    } else {
-        fetchCodesFromAPI();
-    }
+// ============================================
+// دالة مساعدة: CSRF Token
+// ============================================
+function getCSRFToken() {
+    const token = document.querySelector('meta[name="csrf-token"]');
+    return token ? token.getAttribute('content') : '';
 }
 
-async function fetchCodesFromAPI() {
-    try {
-        const token = localStorage.getItem('safesend_token');
-        const response = await fetch('/api/v1/auth/2fa/backup', {
-            method: 'POST',
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        const data = await response.json();
-        if (data.backup_codes) {
-            codes = data.backup_codes;
-            localStorage.setItem('backup_codes', JSON.stringify(codes));
-            renderCodes();
-        }
-    } catch(e) {
+// ============================================
+// دالة مساعدة: getAuthHeaders
+// ============================================
+function getAuthHeaders() {
+    const token = localStorage.getItem('safesend_token');
+    const headers = {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+    };
+    const csrf = getCSRFToken();
+    if (csrf) {
+        headers['X-CSRF-Token'] = csrf;
+    }
+    return headers;
+}
+
+// ============================================
+// تحميل الرموز من الجلسة (وليس localStorage)
+// ============================================
+let sessionCodes = null;
+
+function loadCodes() {
+    // لأسباب أمنية: الرموز الاحتياطية لا تُجلب من الخادم
+    // Security: backup codes are never retrieved from server
+    // تظهر فقط مرة واحدة عند التوليد - Only shown once on generation
+    document.getElementById('emptyMessage').style.display = 'block';
+}
+
+ catch(e) {
         document.getElementById('emptyMessage').style.display = 'block';
     }
 }
 
+// ============================================
+// عرض الرموز - آمن تماماً (لا innerHTML)
+// ============================================
 function renderCodes() {
     const grid = document.getElementById('codesGrid');
+    // مسح آمن
+    while (grid.firstChild) {
+        grid.removeChild(grid.firstChild);
+    }
+    
     if (!codes.length) {
         document.getElementById('emptyMessage').style.display = 'block';
         return;
     }
-    grid.innerHTML = codes.map((code, i) => `
-        <div class="glass-card text-center" style="font-family:monospace;font-size:16px;font-weight:700;letter-spacing:2px;padding:12px;">
-            ${code}
-            <div style="font-size:9px;color:var(--text-muted);margin-top:4px;">الرمز ${i+1}</div>
-        </div>
-    `).join('');
+    document.getElementById('emptyMessage').style.display = 'none';
+    
+    codes.forEach(function(code, i) {
+        // إنشاء البطاقة
+        const card = document.createElement('div');
+        card.className = 'glass-card text-center';
+        card.style.cssText = 'font-family:monospace;font-size:16px;font-weight:700;letter-spacing:2px;padding:12px;';
+        
+        // عرض الرمز - textContent آمن
+        const codeDiv = document.createElement('div');
+        codeDiv.textContent = code;
+        
+        // عرض الترقيم
+        const labelDiv = document.createElement('div');
+        labelDiv.style.cssText = 'font-size:9px;color:var(--text-muted);margin-top:4px;';
+        labelDiv.textContent = 'الرمز ' + (i + 1);
+        
+        card.appendChild(codeDiv);
+        card.appendChild(labelDiv);
+        grid.appendChild(card);
+    });
 }
 
+// ============================================
+// نسخ الكل - مع fallback
+// ============================================
 function copyAll() {
     if (!codes.length) return;
-    navigator.clipboard.writeText(codes.join('\n'));
-    showMessage('success', '✅ تم نسخ جميع الرموز');
+    
+    const text = codes.join('\n');
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showMessage('success', '✅ تم نسخ جميع الرموز');
+        }).catch(function() {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
 }
 
+function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showMessage('success', '✅ تم نسخ جميع الرموز');
+    } catch(e) {
+        showMessage('error', '❌ فشل النسخ - يرجى النسخ يدوياً');
+    }
+    document.body.removeChild(textarea);
+}
+
+// ============================================
+// تحميل TXT
+// ============================================
 function downloadCodes() {
     if (!codes.length) return;
-    const blob = new Blob([codes.join('\n')], {type:'text/plain'});
+    
+    const blob = new Blob([codes.join('\n')], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = 'safesend-backup-codes.txt';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     showMessage('success', '✅ تم التحميل');
 }
 
+// ============================================
+// توليد رموز جديدة
+// ============================================
 async function regenerateCodes() {
     if (!confirm('سيتم إلغاء الرموز القديمة. متابعة؟')) return;
+    
     try {
-        const token = localStorage.getItem('safesend_token');
         const response = await fetch('/api/v1/auth/2fa/backup', {
             method: 'POST',
-            headers: {'Authorization': `Bearer ${token}`}
+            headers: getAuthHeaders()
         });
         const data = await response.json();
         if (data.backup_codes) {
             codes = data.backup_codes;
-            localStorage.setItem('backup_codes', JSON.stringify(codes));
+            sessionCodes = data.backup_codes;
             renderCodes();
             showMessage('success', '✅ تم توليد رموز جديدة');
+        } else {
+            showMessage('error', '❌ فشل توليد الرموز');
         }
     } catch(e) {
         showMessage('error', '❌ فشل توليد الرموز');
     }
 }
 
+// ============================================
+// عرض رسالة - textContent آمن
+// ============================================
 function showMessage(type, text) {
     const msg = document.getElementById('message');
     msg.style.display = 'block';
     msg.textContent = text;
     msg.style.background = type === 'success' ? 'rgba(34,228,172,0.12)' : 'rgba(255,75,106,0.12)';
     msg.style.color = type === 'success' ? 'var(--accent)' : 'var(--danger)';
-    msg.style.border = `1px solid ${type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)'}`;
+    msg.style.border = '1px solid ' + (type === 'success' ? 'rgba(34,228,172,0.5)' : 'rgba(255,75,106,0.5)');
 }
 
+// ============================================
+// بدء التشغيل
+// ============================================
 loadCodes();
 </script>
 </body>

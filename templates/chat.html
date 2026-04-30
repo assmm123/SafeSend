@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" id="csrf-token">
     <title data-i18n="app.name">SafeSend - المحادثات</title>
-    <link rel="stylesheet" href="/static/css/safesend.css
+    <link rel="stylesheet" href="/static/css/safesend.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
@@ -50,7 +51,7 @@
         .chat-item .unread { background:var(--danger);color:white;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700; }
         .dropdown-menu { position:absolute;top:100%;left:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:var(--z-dropdown);min-width:200px;display:none; }
         .dropdown-menu.show { display:block; }
-        .dropdown-menu a { display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);font-size:var(--font-size-sm);color:var(--text);transition:background 0.15s; }
+        .dropdown-menu a { display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);font-size:var(--font-size-sm);color:var(--text);transition:background 0.15s;cursor:pointer; }
         .dropdown-menu a:hover { background:var(--surface-hover); }
         .send-options { display:flex;gap:var(--space-2);padding:var(--space-2) 0; }
         .send-option { padding:6px 12px;border-radius:var(--radius-full);font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);white-space:nowrap; }
@@ -64,87 +65,53 @@
 <body>
 
 <div class="chat-layout">
-    <!-- ==================== Sidebar ==================== -->
+    <!-- Sidebar -->
     <aside class="chat-sidebar" id="chatSidebar">
         <div class="sidebar-search">
-            <input type="text" class="input" placeholder="🔍 بحث عن محادثة..." oninput="filterChats(this.value)">
+            <input type="text" class="input" placeholder="🔍 بحث عن محادثة..." id="searchInput">
         </div>
         <div style="padding:var(--space-2) var(--space-4);display:flex;gap:var(--space-2);font-size:12px;">
-            <span class="send-option active" onclick="filterChats('all')">الكل</span>
-            <span class="send-option" onclick="filterChats('unread')">غير مقروء</span>
-            <span class="send-option" onclick="filterChats('starred')">⭐ مميزة</span>
+            <span class="send-option active" data-filter="all">الكل</span>
+            <span class="send-option" data-filter="unread">غير مقروء</span>
+            <span class="send-option" data-filter="starred">⭐ مميزة</span>
         </div>
-        <div class="sidebar-list" id="chatList">
-            <!-- Populated by JS -->
-        </div>
+        <div class="sidebar-list" id="chatList"></div>
     </aside>
 
-    <!-- ==================== Main Chat ==================== -->
+    <!-- Main Chat -->
     <main class="chat-main" id="chatMain">
         <div class="chat-header">
-            <button class="btn btn-ghost btn-icon hide-desktop" onclick="showSidebar()">←</button>
-            <div class="avatar" style="background:var(--primary);width:40px;height:40px;" id="chatAvatar">A</div>
+            <button class="btn btn-ghost btn-icon hide-desktop" id="btnShowSidebar">←</button>
+            <div class="avatar" style="background:var(--primary);width:40px;height:40px;" id="chatAvatar"></div>
             <div style="flex:1;">
-                <p class="font-semibold" id="chatName">Ahmed</p>
-                <p class="text-xs text-muted" id="chatStatus">🟢 متصل الآن</p>
+                <p class="font-semibold" id="chatName"></p>
+                <p class="text-xs text-muted" id="chatStatus"></p>
             </div>
             <div style="position:relative;">
-                <button class="btn btn-ghost btn-icon" onclick="toggleDropdown('chatSettings')">⋮</button>
+                <button class="btn btn-ghost btn-icon" id="btnChatSettings">⋮</button>
                 <div class="dropdown-menu" id="chatSettings">
-                    <a onclick="muteChat()">🔇 كتم الإشعارات</a>
-                    <a onclick="blockUser()">🚫 حظر المستخدم</a>
-                    <a onclick="showStarred()">⭐ الرسائل المميزة</a>
-                    <a onclick="searchMessages()">🔍 بحث في المحادثة</a>
-                    <a onclick="exportChat()">📤 تصدير المحادثة</a>
-                    <a onclick="clearChat()">🗑️ مسح المحادثة</a>
+                    <a id="btnMute">🔇 كتم الإشعارات</a>
+                    <a id="btnBlock">🚫 حظر المستخدم</a>
+                    <a id="btnStarred">⭐ الرسائل المميزة</a>
+                    <a id="btnSearch">🔍 بحث في المحادثة</a>
+                    <a id="btnExport">📤 تصدير المحادثة</a>
+                    <a id="btnClear">🗑️ مسح المحادثة</a>
                     <hr style="border-color:var(--border);margin:4px 0;">
-                    <a onclick="showDealInfo()">ℹ️ معلومات الصفقة</a>
-                    <a onclick="showChatStats()">📊 إحصائيات</a>
+                    <a id="btnDealInfo">ℹ️ معلومات الصفقة</a>
                 </div>
             </div>
         </div>
 
-        <div class="chat-messages" id="chatMessages">
-            <!-- System message -->
-            <div class="bubble system">📋 تم إنشاء الصفقة · ١ مايو ٢٠٢٤</div>
-            <div class="bubble system">💰 تم تأكيد الدفع: 500 USDT · ٢ مايو ٢٠٢٤</div>
-            
-            <!-- Messages -->
-            <div class="bubble received">
-                مرحباً أحمد، هل يمكنك البدء بالعمل على التصميم؟
-                <div class="time">10:30 ص</div>
-            </div>
-            <div class="bubble sent">
-                نعم بالتأكيد! سأبدأ اليوم وأرسل لك المسودة الأولى خلال يومين
-                <div class="time">10:32 ص <span class="checks read">✓✓</span></div>
-            </div>
-            <div class="bubble received">
-                ممتاز، في انتظارك. هل تحتاج أي ملفات إضافية؟
-                <div class="time">10:33 ص</div>
-            </div>
-            <div class="bubble sent">
-                <div class="reply-preview">"ممتاز، في انتظارك..."</div>
-                لا شكراً، المعلومات الموجودة كافية للبدء
-                <div class="time">10:34 ص <span class="checks read">✓✓</span></div>
-            </div>
-            <div class="bubble sent">
-                <div style="background:rgba(0,0,0,0.1);border-radius:8px;padding:8px;margin-bottom:4px;">
-                    📸 <span style="font-size:11px;">design-preview.jpg</span>
-                </div>
-                هذه مسودة سريعة للشكل العام
-                <div class="time">10:35 ص <span class="checks read">✓✓</span></div>
-            </div>
-        </div>
-
+        <div class="chat-messages" id="chatMessages"></div>
         <div class="typing-indicator" id="typingIndicator" style="display:none;">
-            <span>Ahmed يكتب</span>
+            <span id="typingUser"></span>
             <span class="typing-dots"><span></span><span></span><span></span></span>
         </div>
 
         <div class="chat-input-area">
             <div class="reply-bar" id="replyBar" style="display:none;">
                 <span>↩️ رد على: <span id="replyText"></span></span>
-                <button class="btn btn-ghost btn-icon btn-sm" onclick="cancelReply()">✕</button>
+                <button class="btn btn-ghost btn-icon btn-sm" id="btnCancelReply">✕</button>
             </div>
             <div class="send-options" id="sendOptions" style="display:none;">
                 <span class="send-option active" data-type="normal">📸 عادي</span>
@@ -153,29 +120,18 @@
                 <span class="send-option" data-type="drm">🔒 DRM محمي</span>
             </div>
             <div style="display:flex;gap:var(--space-2);align-items:flex-end;">
-                <button class="btn btn-ghost btn-icon" onclick="toggleFileOptions()" title="إرفاق">📎</button>
+                <button class="btn btn-ghost btn-icon" id="btnFileOptions" title="إرفاق">📎</button>
                 <div style="flex:1;position:relative;">
-                    <textarea id="messageInput" class="input" rows="1" placeholder="اكتب رسالة..." onkeydown="handleKey(event)" style="resize:none;min-height:42px;max-height:120px;"></textarea>
-                    <button class="btn btn-ghost btn-icon" style="position:absolute;left:4px;bottom:4px;" onclick="toggleEmoji()" title="إيموجي">😊</button>
+                    <textarea id="messageInput" class="input" rows="1" placeholder="اكتب رسالة..." style="resize:none;min-height:42px;max-height:120px;"></textarea>
                 </div>
-                <button class="btn btn-ghost btn-icon" onclick="startRecording()" id="micBtn" title="تسجيل صوتي">🎤</button>
-                <button class="btn btn-primary btn-icon" onclick="sendMessage()" title="إرسال">📤</button>
+                <button class="btn btn-ghost btn-icon" id="btnMic" title="تسجيل صوتي">🎤</button>
+                <button class="btn btn-primary btn-icon" id="btnSend" title="إرسال">📤</button>
             </div>
             <div class="voice-recorder" id="voiceRecorder" style="display:none;">
-                <button class="btn btn-danger btn-icon btn-sm" onclick="cancelRecording()">✕</button>
+                <button class="btn btn-danger btn-icon btn-sm" id="btnCancelRecording">✕</button>
                 <div class="voice-wave" id="voiceWave"></div>
                 <span id="recordingTime">00:00</span>
-                <button class="btn btn-primary btn-sm" onclick="sendVoice()">إرسال 🎤</button>
-            </div>
-            <div class="grid-4" id="fileOptions" style="display:none;margin-top:var(--space-2);">
-                <div class="card card-interactive text-center p-2" onclick="sendFile('image')"><span style="font-size:24px;">📸</span><p class="text-xs">صورة</p></div>
-                <div class="card card-interactive text-center p-2" onclick="sendFile('video')"><span style="font-size:24px;">🎥</span><p class="text-xs">فيديو</p></div>
-                <div class="card card-interactive text-center p-2" onclick="sendFile('file')"><span style="font-size:24px;">📎</span><p class="text-xs">ملف</p></div>
-                <div class="card card-interactive text-center p-2" onclick="sendFile('location')"><span style="font-size:24px;">📍</span><p class="text-xs">موقع</p></div>
-            </div>
-            <div id="autoReplyBanner" style="display:none;background:var(--warning-bg);padding:var(--space-2);border-radius:var(--radius-sm);margin-top:var(--space-2);font-size:12px;">
-                🤖 الرد التلقائي مفعل: <span id="autoReplyText"></span>
-                <button class="btn btn-ghost btn-sm" onclick="disableAutoReply()">تعطيل</button>
+                <button class="btn btn-primary btn-sm" id="btnSendVoice">إرسال 🎤</button>
             </div>
         </div>
     </main>
@@ -183,303 +139,536 @@
 
 <script src="/static/js/main.js"></script>
 <script>
-    // ==================== Data ====================
-    const chats = [
-        { id:1, name:'Ahmed', lastMsg:'تمام، في انتظارك...', time:'10:35', unread:0, avatar:'#1a73e8', online:true, deal:'تصميم موقع - $500' },
-        { id:2, name:'Sara', lastMsg:'تم استلام الملف ✓', time:'09:15', unread:2, avatar:'#0d904f', online:true, deal:'ترجمة مستندات - $200' },
-        { id:3, name:'Ali', lastMsg:'هل يمكن تعديل اللون؟', time:'أمس', unread:0, avatar:'#f5a623', online:false, deal:'استشارة تقنية - $50' },
-    ];
-    let activeChat = 1;
-    let replyingTo = null;
-    let sendType = 'normal';
-    let mediaRecorder = null;
-    let recordingTimer = null;
-    let autoReplySettings = JSON.parse(localStorage.getItem('autoReply') || '{"enabled":false,"message":""}');
-
-    // ==================== Init ====================
-    function init() {
-        renderChatList();
-        if (autoReplySettings.enabled) showAutoReplyBanner();
-        WebSocketManager.on('new_message', handleIncomingMessage);
-        WebSocketManager.on('typing', showTyping);
-        WebSocketManager.on('stop_typing', hideTyping);
+// ============================================
+// Theme
+// ============================================
+(function() {
+    var theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
     }
+})();
 
-    // ==================== Chat List ====================
-    function renderChatList(filter = 'all') {
-        const list = document.getElementById('chatList');
-        let filtered = chats;
-        if (filter === 'unread') filtered = chats.filter(c => c.unread > 0);
-        if (filter === 'starred') filtered = chats.filter(c => c.starred);
-        
-        list.innerHTML = filtered.map(c => `
-            <div class="chat-item ${c.id === activeChat ? 'active' : ''}" onclick="openChat(${c.id})">
-                <div class="avatar" style="background:${c.avatar};">${c.name[0]}</div>
-                <div style="flex:1;min-width:0;">
-                    <div style="display:flex;justify-content:space-between;">
-                        <span class="font-semibold">${c.name}</span>
-                        <span class="text-xs text-muted">${c.time}</span>
-                    </div>
-                    <p class="text-sm text-muted truncate">${c.lastMsg}</p>
-                </div>
-                ${c.unread > 0 ? `<span class="unread">${c.unread}</span>` : ''}
-            </div>
-        `).join('');
-    }
+// ============================================
+// CSRF & Auth Helpers
+// ============================================
+function getCSRFToken() {
+    var el = document.getElementById('csrf-token');
+    return el ? el.getAttribute('content') : '';
+}
 
-    function filterChats(type) {
-        document.querySelectorAll('.send-option').forEach(el => el.classList.remove('active'));
-        event.target.classList.add('active');
-        renderChatList(type);
-    }
+function getAuthHeaders() {
+    var token = localStorage.getItem('safesend_token');
+    var headers = {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+    };
+    var csrf = getCSRFToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return headers;
+}
 
-    function openChat(id) {
-        activeChat = id;
-        const chat = chats.find(c => c.id === id);
-        document.getElementById('chatName').textContent = chat.name;
-        document.getElementById('chatAvatar').textContent = chat.name[0];
-        document.getElementById('chatAvatar').style.background = chat.avatar;
-        document.getElementById('chatStatus').innerHTML = chat.online ? '🟢 متصل الآن' : '🟡 آخر ظهور أمس';
-        renderChatList();
-        if (window.innerWidth < 768) hideSidebar();
-        document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-    }
+// ============================================
+// State
+// ============================================
+var chats = [];
+var activeChatId = null;
+var replyingTo = null;
+var sendType = 'normal';
+var mediaRecorder = null;
+var recordingTimer = null;
+var autoReplySettings = {};
 
-    function showSidebar() { document.getElementById('chatSidebar').classList.add('mobile-show'); }
-    function hideSidebar() { document.getElementById('chatSidebar').classList.remove('mobile-show'); }
+try {
+    autoReplySettings = JSON.parse(localStorage.getItem('autoReply') || '{"enabled":false,"message":""}');
+} catch(e) {
+    autoReplySettings = {enabled: false, message: ''};
+}
 
-    // ==================== Messages ====================
-    function sendMessage() {
-        const input = document.getElementById('messageInput');
-        const text = input.value.trim();
-        if (!text && !replyingTo) return;
-
-        const msgDiv = document.createElement('div');
-        msgDiv.className = 'bubble sent';
-        let html = '';
-        if (replyingTo) {
-            html += `<div class="reply-preview">↩️ ${replyingTo}</div>`;
-            cancelReply();
+// ============================================
+// Load Chats from API
+// ============================================
+async function loadChats() {
+    try {
+        var resp = await fetch('/api/v1/messages/conversations', {
+            headers: getAuthHeaders()
+        });
+        if (resp.ok) {
+            var data = await resp.json();
+            chats = data.conversations || [];
         }
-        html += `${text}<div class="time">${getTime()} <span class="checks">✓</span></div>`;
-        msgDiv.innerHTML = html;
-        document.getElementById('chatMessages').appendChild(msgDiv);
-        scrollToBottom();
+    } catch(e) {
+        console.error('Failed to load chats:', e);
+    }
+    renderChatList();
+    if (chats.length > 0 && !activeChatId) {
+        openChat(chats[0].id);
+    }
+}
 
-        WebSocketManager.send('message', { chat_id: activeChat, content: text, type: sendType });
-        
-        // Auto-reply simulation
-        if (autoReplySettings.enabled) {
-            setTimeout(() => {
-                const replyDiv = document.createElement('div');
-                replyDiv.className = 'bubble received';
-                replyDiv.innerHTML = `${autoReplySettings.message}<div class="time">${getTime()}</div>`;
-                document.getElementById('chatMessages').appendChild(replyDiv);
-                scrollToBottom();
-            }, 2000);
+// ============================================
+// Render Chat List - NO innerHTML
+// ============================================
+function renderChatList(filter) {
+    filter = filter || 'all';
+    var list = document.getElementById('chatList');
+    // Clear safely
+    while (list.firstChild) {
+        list.removeChild(list.firstChild);
+    }
+
+    var filtered = chats;
+    if (filter === 'unread') {
+        filtered = chats.filter(function(c) { return c.unread > 0; });
+    } else if (filter === 'starred') {
+        filtered = chats.filter(function(c) { return c.starred; });
+    }
+
+    filtered.forEach(function(c) {
+        var item = document.createElement('div');
+        item.className = 'chat-item' + (c.id === activeChatId ? ' active' : '');
+        item.onclick = function() { openChat(c.id); };
+
+        var avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.style.background = c.avatar || 'var(--primary)';
+        avatar.textContent = (c.name || '?')[0];
+
+        var info = document.createElement('div');
+        info.style.cssText = 'flex:1;min-width:0;';
+
+        var topRow = document.createElement('div');
+        topRow.style.cssText = 'display:flex;justify-content:space-between;';
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'font-semibold';
+        nameSpan.textContent = c.name || '';
+
+        var timeSpan = document.createElement('span');
+        timeSpan.className = 'text-xs text-muted';
+        timeSpan.textContent = c.time || '';
+
+        topRow.appendChild(nameSpan);
+        topRow.appendChild(timeSpan);
+
+        var lastMsg = document.createElement('p');
+        lastMsg.className = 'text-sm text-muted truncate';
+        lastMsg.textContent = c.lastMsg || '';
+
+        info.appendChild(topRow);
+        info.appendChild(lastMsg);
+
+        item.appendChild(avatar);
+        item.appendChild(info);
+
+        if (c.unread > 0) {
+            var badge = document.createElement('span');
+            badge.className = 'unread';
+            badge.textContent = c.unread;
+            item.appendChild(badge);
         }
 
-        input.value = '';
-        input.style.height = 'auto';
-        sendType = 'normal';
-        document.getElementById('sendOptions').style.display = 'none';
-    }
+        list.appendChild(item);
+    });
+}
 
-    function handleKey(e) {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        // Typing indicator
-        WebSocketManager.send('typing', { chat_id: activeChat, is_typing: true });
-        clearTimeout(window.typingTimeout);
-        window.typingTimeout = setTimeout(() => {
-            WebSocketManager.send('typing', { chat_id: activeChat, is_typing: false });
-        }, 2000);
-    }
+// ============================================
+// Filter Chats
+// ============================================
+function filterChats(type) {
+    var opts = document.querySelectorAll('.send-option[data-filter]');
+    opts.forEach(function(el) { el.classList.remove('active'); });
+    var active = document.querySelector('.send-option[data-filter="' + type + '"]');
+    if (active) active.classList.add('active');
+    renderChatList(type);
+}
 
-    function handleIncomingMessage(data) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = 'bubble received';
-        msgDiv.innerHTML = `${data.content}<div class="time">${getTime()}</div>`;
-        document.getElementById('chatMessages').appendChild(msgDiv);
-        scrollToBottom();
-    }
+// ============================================
+// Open Chat & Load Messages from API
+// ============================================
+async function openChat(id) {
+    activeChatId = id;
+    var chat = chats.find(function(c) { return c.id === id; });
+    if (!chat) return;
 
-    function showTyping() { document.getElementById('typingIndicator').style.display = 'flex'; }
-    function hideTyping() { document.getElementById('typingIndicator').style.display = 'none'; }
+    document.getElementById('chatName').textContent = chat.name || '';
+    document.getElementById('chatAvatar').textContent = (chat.name || '?')[0];
+    document.getElementById('chatAvatar').style.background = chat.avatar || 'var(--primary)';
+    document.getElementById('chatStatus').textContent = chat.online ? '🟢 متصل الآن' : '🟡 آخر ظهور أمس';
 
-    function scrollToBottom() {
-        const msgs = document.getElementById('chatMessages');
-        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
-    }
+    renderChatList();
+    if (window.innerWidth < 768) hideSidebar();
 
-    function getTime() {
-        return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-    }
+    // Load messages from API
+    await loadMessages(id);
+}
 
-    // ==================== Reply ====================
-    function replyTo(text) {
-        replyingTo = text;
-        document.getElementById('replyText').textContent = text.substring(0, 50);
-        document.getElementById('replyBar').style.display = 'flex';
-        document.getElementById('messageInput').focus();
-    }
-    function cancelReply() {
-        replyingTo = null;
-        document.getElementById('replyBar').style.display = 'none';
-    }
-
-    // ==================== File Options ====================
-    function toggleFileOptions() {
-        const opts = document.getElementById('fileOptions');
-        opts.style.display = opts.style.display === 'none' ? 'grid' : 'none';
-        if (opts.style.display === 'grid') {
-            document.getElementById('sendOptions').style.display = 'flex';
-        }
-    }
-
-    function sendFile(type) {
-        const input = document.createElement('input');
-        input.type = 'file';
-        if (type === 'image') input.accept = 'image/*';
-        if (type === 'video') input.accept = 'video/*';
-        input.onchange = (e) => {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'bubble sent';
-            const icon = type === 'image' ? '📸' : type === 'video' ? '🎥' : '📎';
-            msgDiv.innerHTML = `${icon} ${e.target.files[0].name}<div class="time">${getTime()} <span class="checks">✓</span></div>`;
-            document.getElementById('chatMessages').appendChild(msgDiv);
+async function loadMessages(chatId) {
+    try {
+        var resp = await fetch('/api/v1/messages/' + chatId, {
+            headers: getAuthHeaders()
+        });
+        if (resp.ok) {
+            var data = await resp.json();
+            var container = document.getElementById('chatMessages');
+            // Clear safely
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            (data.messages || []).forEach(function(msg) {
+                appendMessage(msg.content, msg.sender_id === getCurrentUserId() ? 'sent' : 'received', msg.time);
+            });
             scrollToBottom();
-            document.getElementById('fileOptions').style.display = 'none';
-            document.getElementById('sendOptions').style.display = 'none';
-        };
-        input.click();
-    }
-
-    // ==================== Send Options ====================
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('send-option') && e.target.dataset.type) {
-            document.querySelectorAll('.send-option').forEach(el => el.classList.remove('active'));
-            e.target.classList.add('active');
-            sendType = e.target.dataset.type;
         }
-    });
+    } catch(e) {
+        console.error('Failed to load messages:', e);
+    }
+}
 
-    // ==================== Voice Recording ====================
-    async function startRecording() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            document.getElementById('voiceRecorder').style.display = 'flex';
-            document.getElementById('micBtn').style.display = 'none';
-            let sec = 0;
-            recordingTimer = setInterval(() => {
-                sec++;
-                document.getElementById('recordingTime').textContent = 
-                    `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
-            }, 1000);
-        } catch(e) {
-            alert('لا يمكن الوصول للميكروفون');
-        }
+// ============================================
+// Send Message - REAL API
+// ============================================
+async function sendMessage() {
+    var input = document.getElementById('messageInput');
+    var text = input.value.trim();
+    if (!text) return;
+
+    // Append locally (optimistic)
+    appendMessage(text, 'sent', getTime());
+    input.value = '';
+    input.style.height = 'auto';
+    sendType = 'normal';
+    document.getElementById('sendOptions').style.display = 'none';
+
+    try {
+        await fetch('/api/v1/messages', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                conversation_id: activeChatId,
+                content: text,
+                type: sendType,
+                reply_to: replyingTo
+            })
+        });
+        if (replyingTo) cancelReply();
+    } catch(e) {
+        console.error('Failed to send message:', e);
+    }
+}
+
+// ============================================
+// Append Message - SAFE (NO innerHTML)
+// ============================================
+function appendMessage(content, type, time) {
+    var container = document.getElementById('chatMessages');
+    var msgDiv = document.createElement('div');
+    msgDiv.className = 'bubble ' + type;
+
+    // Reply preview
+    if (replyingTo && type === 'sent') {
+        var replyPreview = document.createElement('div');
+        replyPreview.className = 'reply-preview';
+        replyPreview.textContent = '↩️ ' + replyingTo;
+        msgDiv.appendChild(replyPreview);
     }
 
-    function cancelRecording() {
-        if (mediaRecorder) mediaRecorder.stop();
-        clearInterval(recordingTimer);
-        document.getElementById('voiceRecorder').style.display = 'none';
-        document.getElementById('micBtn').style.display = 'flex';
-    }
+    // Content
+    var contentSpan = document.createElement('span');
+    contentSpan.textContent = content;
+    msgDiv.appendChild(contentSpan);
 
-    function sendVoice() {
-        cancelRecording();
-        const msgDiv = document.createElement('div');
+    // Time
+    var timeDiv = document.createElement('div');
+    timeDiv.className = 'time';
+    timeDiv.textContent = time;
+    if (type === 'sent') {
+        var checks = document.createElement('span');
+        checks.className = 'checks';
+        checks.textContent = '✓';
+        timeDiv.appendChild(checks);
+    }
+    msgDiv.appendChild(timeDiv);
+
+    container.appendChild(msgDiv);
+    scrollToBottom();
+}
+
+// ============================================
+// Handle Incoming Message (WebSocket/API)
+// ============================================
+function handleIncomingMessage(data) {
+    appendMessage(data.content, 'received', getTime());
+}
+
+// ============================================
+// Send File - REAL upload
+// ============================================
+function sendFile(type) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    if (type === 'image') input.accept = 'image/*';
+    if (type === 'video') input.accept = 'video/*';
+
+    input.onchange = async function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        // Show file bubble
+        var container = document.getElementById('chatMessages');
+        var msgDiv = document.createElement('div');
         msgDiv.className = 'bubble sent';
-        msgDiv.innerHTML = `🎤 رسالة صوتية (${document.getElementById('recordingTime').textContent})<div class="time">${getTime()} <span class="checks">✓</span></div>`;
-        document.getElementById('chatMessages').appendChild(msgDiv);
+
+        var iconSpan = document.createElement('span');
+        iconSpan.textContent = type === 'image' ? '📸 ' : type === 'video' ? '🎥 ' : '📎 ';
+        msgDiv.appendChild(iconSpan);
+
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
+        msgDiv.appendChild(nameSpan);
+
+        var timeDiv = document.createElement('div');
+        timeDiv.className = 'time';
+        timeDiv.textContent = getTime();
+        msgDiv.appendChild(timeDiv);
+
+        container.appendChild(msgDiv);
         scrollToBottom();
-    }
 
-    // ==================== Auto Reply ====================
-    function setupAutoReply(message) {
-        autoReplySettings = { enabled: true, message };
-        localStorage.setItem('autoReply', JSON.stringify(autoReplySettings));
-        showAutoReplyBanner();
-    }
+        // Upload to API
+        var formData = new FormData();
+        formData.append('file', file);
+        formData.append('conversation_id', activeChatId);
 
-    function disableAutoReply() {
-        autoReplySettings.enabled = false;
-        localStorage.setItem('autoReply', JSON.stringify(autoReplySettings));
-        document.getElementById('autoReplyBanner').style.display = 'none';
-    }
-
-    function showAutoReplyBanner() {
-        document.getElementById('autoReplyBanner').style.display = 'block';
-        document.getElementById('autoReplyText').textContent = autoReplySettings.message;
-    }
-
-    // ==================== Chat Settings ====================
-    function toggleDropdown(id) {
-        document.getElementById(id).classList.toggle('show');
-    }
-
-    function muteChat() {
-        const duration = prompt('مدة الكتم:\n1) 8 ساعات\n2) 24 ساعة\n3) للأبد', '1');
-        const times = {'1':'8 ساعات','2':'24 ساعة','3':'للأبد'};
-        alert(`✅ تم كتم الإشعارات لمدة ${times[duration] || '8 ساعات'}`);
-        toggleDropdown('chatSettings');
-    }
-
-    function blockUser() {
-        if (confirm('هل أنت متأكد من حظر هذا المستخدم؟ لن يتمكن من مراسلتك أو التعامل معك.')) {
-            alert('🚫 تم حظر المستخدم وإبلاغ المشرف');
+        try {
+            await fetch('/api/v1/files/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('safesend_token'),
+                    'X-CSRF-Token': getCSRFToken()
+                },
+                body: formData
+            });
+        } catch(e) {
+            console.error('Upload failed:', e);
         }
-        toggleDropdown('chatSettings');
-    }
+    };
+    input.click();
+}
 
-    function showStarred() {
-        alert('⭐ الرسائل المميزة:\n- "تمام، في انتظارك..." (10:33 ص)');
-        toggleDropdown('chatSettings');
-    }
+// ============================================
+// Helpers
+// ============================================
+function getTime() {
+    return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+}
 
-    function searchMessages() {
-        const q = prompt('🔍 ابحث في المحادثة:');
-        if (q) alert(`نتائج البحث عن "${q}":\n- رسالة تحتوي على "${q}" (10:32 ص)`);
-        toggleDropdown('chatSettings');
-    }
+function scrollToBottom() {
+    var msgs = document.getElementById('chatMessages');
+    setTimeout(function() { msgs.scrollTop = msgs.scrollHeight; }, 50);
+}
 
-    function exportChat() {
-        const format = prompt('صيغة التصدير:\n1) JSON\n2) PDF\n3) TXT', '1');
-        const formats = {'1':'JSON','2':'PDF','3':'TXT'};
-        alert(`📤 جاري تصدير المحادثة بصيغة ${formats[format] || 'JSON'}...`);
-        toggleDropdown('chatSettings');
-    }
-
-    function clearChat() {
-        if (confirm('🗑️ هل تريد مسح جميع الرسائل؟\n1) مسح عندي فقط\n2) مسح للطرفين')) {
-            alert('✅ تم مسح المحادثة');
+function getCurrentUserId() {
+    try {
+        var token = localStorage.getItem('safesend_token');
+        if (token) {
+            var payload = JSON.parse(atob(token.split('.')[1]));
+            return payload.user_id;
         }
-        toggleDropdown('chatSettings');
-    }
+    } catch(e) {}
+    return null;
+}
 
-    function showDealInfo() {
-        alert('ℹ️ معلومات الصفقة:\n📋 تصميم موقع احترافي\n💰 500 USDT\n📅 التسليم: 15 مايو\n👤 البائع: أنت\n👤 المشتري: Ahmed');
-        toggleDropdown('chatSettings');
-    }
+function showSidebar() {
+    document.getElementById('chatSidebar').classList.add('mobile-show');
+}
+function hideSidebar() {
+    document.getElementById('chatSidebar').classList.remove('mobile-show');
+}
 
-    function showChatStats() {
-        alert('📊 إحصائيات المحادثة:\n📝 245 رسالة\n📸 12 صورة\n📎 5 ملفات\n🎤 3 رسائل صوتية\n⏱️ أسرع رد: 3 دقائق');
-        toggleDropdown('chatSettings');
-    }
+// ============================================
+// Reply
+// ============================================
+function replyTo(text) {
+    replyingTo = text;
+    document.getElementById('replyText').textContent = text.substring(0, 50);
+    document.getElementById('replyBar').style.display = 'flex';
+    document.getElementById('messageInput').focus();
+}
+function cancelReply() {
+    replyingTo = null;
+    document.getElementById('replyBar').style.display = 'none';
+}
 
-    // ==================== Init ====================
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.dropdown-menu') && !e.target.closest('.btn-icon')) {
-            document.querySelectorAll('.dropdown-menu').forEach(d => d.classList.remove('show'));
+// ============================================
+// Voice Recording
+// ============================================
+async function startRecording() {
+    try {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
+        document.getElementById('voiceRecorder').style.display = 'flex';
+        document.getElementById('btnMic').style.display = 'none';
+        var sec = 0;
+        recordingTimer = setInterval(function() {
+            sec++;
+            document.getElementById('recordingTime').textContent =
+                String(Math.floor(sec/60)).padStart(2,'0') + ':' + String(sec%60).padStart(2,'0');
+        }, 1000);
+    } catch(e) {
+        alert('لا يمكن الوصول للميكروفون');
+    }
+}
+function cancelRecording() {
+    if (mediaRecorder) mediaRecorder.stop();
+    clearInterval(recordingTimer);
+    document.getElementById('voiceRecorder').style.display = 'none';
+    document.getElementById('btnMic').style.display = 'flex';
+}
+function sendVoice() {
+    var time = document.getElementById('recordingTime').textContent;
+    cancelRecording();
+    var container = document.getElementById('chatMessages');
+    var msgDiv = document.createElement('div');
+    msgDiv.className = 'bubble sent';
+
+    var span = document.createElement('span');
+    span.textContent = '🎤 رسالة صوتية (' + time + ')';
+    msgDiv.appendChild(span);
+
+    var timeDiv = document.createElement('div');
+    timeDiv.className = 'time';
+    timeDiv.textContent = getTime();
+    msgDiv.appendChild(timeDiv);
+
+    container.appendChild(msgDiv);
+    scrollToBottom();
+}
+
+// ============================================
+// Auto Reply
+// ============================================
+function setupAutoReply(message) {
+    autoReplySettings = { enabled: true, message: message };
+    localStorage.setItem('autoReply', JSON.stringify(autoReplySettings));
+}
+function disableAutoReply() {
+    autoReplySettings.enabled = false;
+    localStorage.setItem('autoReply', JSON.stringify(autoReplySettings));
+}
+
+// ============================================
+// Chat Settings Actions
+// ============================================
+function toggleDropdown(id) {
+    document.getElementById(id).classList.toggle('show');
+}
+
+// ============================================
+// Event Listeners
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Load chats
+    loadChats();
+
+    // Send button
+    document.getElementById('btnSend').addEventListener('click', sendMessage);
+
+    // Enter key
+    document.getElementById('messageInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
         }
     });
 
-    init();
-    openChat(1);
-</script>
+    // File options
+    document.getElementById('btnFileOptions').addEventListener('click', function() {
+        var opts = document.getElementById('sendOptions');
+        opts.style.display = opts.style.display === 'none' ? 'flex' : 'none';
+    });
 
+    // Mic button
+    document.getElementById('btnMic').addEventListener('click', startRecording);
+
+    // Voice buttons
+    document.getElementById('btnCancelRecording').addEventListener('click', cancelRecording);
+    document.getElementById('btnSendVoice').addEventListener('click', sendVoice);
+
+    // Cancel reply
+    document.getElementById('btnCancelReply').addEventListener('click', cancelReply);
+
+    // Show sidebar (mobile)
+    document.getElementById('btnShowSidebar').addEventListener('click', showSidebar);
+
+    // Chat settings dropdown
+    document.getElementById('btnChatSettings').addEventListener('click', function() {
+        toggleDropdown('chatSettings');
+    });
+
+    // Send options
+    document.querySelectorAll('.send-option[data-type]').forEach(function(el) {
+        el.addEventListener('click', function() {
+            document.querySelectorAll('.send-option[data-type]').forEach(function(e) { e.classList.remove('active'); });
+            el.classList.add('active');
+            sendType = el.dataset.type;
+        });
+    });
+
+    // Filter options
+    document.querySelectorAll('.send-option[data-filter]').forEach(function(el) {
+        el.addEventListener('click', function() {
+            filterChats(el.dataset.filter);
+        });
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.dropdown-menu') && !e.target.closest('#btnChatSettings')) {
+            document.querySelectorAll('.dropdown-menu').forEach(function(d) { d.classList.remove('show'); });
+        }
+    });
+
+    // WebSocket events (if WebSocketManager exists)
+    if (typeof WebSocketManager !== 'undefined') {
+        WebSocketManager.on('new_message', handleIncomingMessage);
+        WebSocketManager.on('typing', function(data) {
+            var el = document.getElementById('typingIndicator');
+            el.style.display = 'flex';
+            document.getElementById('typingUser').textContent = (data.user || '') + ' يكتب';
+        });
+        WebSocketManager.on('stop_typing', function() {
+            document.getElementById('typingIndicator').style.display = 'none';
+        });
+    }
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', function() {
+        var q = this.value.toLowerCase();
+        var items = document.querySelectorAll('.chat-item');
+        items.forEach(function(item) {
+            var name = (item.querySelector('.font-semibold') || {}).textContent || '';
+            item.style.display = name.toLowerCase().includes(q) ? 'flex' : 'none';
+        });
+    });
+});
+
+// ============================================
+// Typing indicator (outgoing)
+// ============================================
+var typingTimeout;
+document.getElementById('messageInput').addEventListener('input', function() {
+    if (typeof WebSocketManager !== 'undefined') {
+        WebSocketManager.send('typing', { chat_id: activeChatId, is_typing: true });
+    }
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(function() {
+        if (typeof WebSocketManager !== 'undefined') {
+            WebSocketManager.send('typing', { chat_id: activeChatId, is_typing: false });
+        }
+    }, 2000);
+});
+</script>
 </body>
 </html>

@@ -1,31 +1,162 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" id="csrf-token">
     <title>SafeSend - أعمالي</title>
     <link rel="stylesheet" href="/static/css/safesend.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .logo-circle {
+            width: 44px; height: 44px;
+            border-radius: 14px;
+            background: var(--primary);
+            color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px; flex-shrink: 0;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .grid-auto {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 14px;
+        }
+        .portfolio-card {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .portfolio-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .portfolio-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+        .portfolio-card .card-body {
+            padding: 12px 14px;
+        }
+        .portfolio-card .card-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .portfolio-card .card-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+        .portfolio-card .card-actions {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            display: flex;
+            gap: 4px;
+        }
+        .portfolio-card .btn-icon-sm {
+            width: 30px; height: 30px;
+            border-radius: 10px;
+            border: 1px solid var(--border-glass);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .portfolio-card .btn-icon-sm:hover { background: var(--danger); }
+        
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: var(--z-modal, 1000);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            padding: 24px;
+        }
+        .modal h3 { margin: 0 0 12px; font-size: 18px; }
+        
+        .image-preview {
+            width: 100%;
+            height: 100px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            object-fit: cover;
+            margin-top: 8px;
+            display: none;
+        }
+        
+        .error-msg {
+            background: rgba(255,75,106,0.1);
+            border: 1px solid rgba(255,75,106,0.3);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--danger);
+            text-align: center;
+            margin: 12px 0;
+        }
+        .success-msg {
+            background: rgba(34,228,172,0.1);
+            border: 1px solid rgba(34,228,172,0.3);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--accent);
+            text-align: center;
+            margin: 12px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-auto { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+        }
+    </style>
 </head>
-<body style="padding:20px;">
+<body style="background:var(--bg);color:var(--text);font-family:Tajawal;padding:20px;min-height:100vh;">
 
 <div class="container" style="padding-bottom:100px;">
 
+    <!-- Header -->
     <div class="header">
         <div style="display:flex;align-items:center;gap:14px;">
             <div class="logo-circle">S</div>
             <div>
-                <h1 style="font-size:22px;font-weight:800;">🎨 أعمالي</h1>
-                <p style="font-size:12px;color:var(--text-muted);">معرض الأعمال السابقة</p>
+                <h1 style="font-size:22px;font-weight:800;margin:0;">🎨 أعمالي</h1>
+                <p style="font-size:12px;color:var(--text-muted);margin:0;">معرض الأعمال السابقة</p>
             </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="showAddModal()">+ إضافة عمل</button>
+        <button class="btn btn-primary btn-sm" id="btnAdd">+ إضافة عمل</button>
     </div>
 
+    <!-- Feedback Messages -->
+    <div id="errorMsg" class="error-msg" style="display:none;"></div>
+    <div id="successMsg" class="success-msg" style="display:none;"></div>
+
+    <!-- Portfolio Grid -->
     <div id="portfolioGrid" class="grid-auto"></div>
+
+    <!-- States -->
     <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
     <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد أعمال بعد. أضف أول عمل لك!</p>
 
+    <!-- Bottom Nav -->
     <div class="bottom-nav">
         <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
         <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
@@ -35,95 +166,322 @@
     </div>
 </div>
 
+<!-- Add Modal -->
 <div id="addModal" class="modal-overlay" style="display:none;">
-    <div class="modal glass-card" style="max-width:420px;padding:24px;">
-        <h3>إضافة عمل جديد</h3>
-        <input class="input mt-3" id="itemTitle" placeholder="عنوان العمل">
-        <textarea class="input" id="itemDesc" placeholder="وصف العمل" rows="2"></textarea>
-        <input class="input" id="itemImage" placeholder="رابط الصورة (اختياري)">
+    <div class="modal">
+        <h3>➕ إضافة عمل جديد</h3>
+        <input class="input mt-3" id="itemTitle" placeholder="عنوان العمل *">
+        <textarea class="input" id="itemDesc" placeholder="وصف العمل" rows="2" style="margin-top:8px;"></textarea>
+        <input class="input" id="itemImage" placeholder="رابط الصورة (اختياري)" style="margin-top:8px;" oninput="previewImage()">
+        <img id="imagePreview" class="image-preview" alt="معاينة">
         <div class="grid-2 mt-3">
-            <button class="btn btn-primary btn-block" onclick="addItem()">حفظ</button>
-            <button class="btn btn-outline btn-block" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary btn-block" id="btnSave">💾 حفظ</button>
+            <button class="btn btn-outline btn-block" id="btnCancelModal">إلغاء</button>
+        </div>
+        <p id="modalError" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;"></p>
+    </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div id="deleteModal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:360px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:8px;">🗑️</div>
+        <h3>تأكيد الحذف</h3>
+        <p style="color:var(--text-muted);font-size:13px;">هل أنت متأكد من حذف هذا العمل؟ لا يمكن التراجع.</p>
+        <div class="grid-2 mt-3">
+            <button class="btn btn-danger btn-block" id="btnConfirmDelete">نعم، احذف</button>
+            <button class="btn btn-outline btn-block" id="btnCancelDelete">إلغاء</button>
         </div>
     </div>
 </div>
 
 <script>
+// ============================================
+// Theme
+// ============================================
+(function() {
+    var theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+})();
+
+// ============================================
+// Helpers
+// ============================================
+var token = localStorage.getItem('safesend_token');
+var currentUsername = '';
+
+function getCSRFToken() {
+    var el = document.getElementById('csrf-token');
+    return el ? el.getAttribute('content') : '';
+}
+
+function getHeaders() {
+    var h = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+    var csrf = getCSRFToken();
+    if (csrf) h['X-CSRF-Token'] = csrf;
+    return h;
+}
+
+function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('successMsg').style.display = 'none';
+    setTimeout(function() { el.style.display = 'none'; }, 5000);
+}
+
+function showSuccess(msg) {
+    var el = document.getElementById('successMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('errorMsg').style.display = 'none';
+    setTimeout(function() { el.style.display = 'none'; }, 3000);
+}
+
+// ============================================
+// Load Portfolio
+// ============================================
 async function loadPortfolio() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('empty').style.display = 'none';
+    
     try {
-        const token = localStorage.getItem('safesend_token');
-        const me = await fetch('/api/v1/auth/me', {headers:{'Authorization':`Bearer ${token}`}});
-        const userData = await me.json();
-        const username = userData.user?.username || 'me';
-
-        const response = await fetch(`/api/v1/users/${username}/portfolio`, {
-            headers:{'Authorization':`Bearer ${token}`}
+        // Get current user
+        var meResp = await fetch('/api/v1/auth/me', { headers: getHeaders() });
+        if (!meResp.ok) {
+            showError('❌ فشل تحميل الملف الشخصي');
+            document.getElementById('loading').style.display = 'none';
+            return;
+        }
+        var userData = await meResp.json();
+        currentUsername = (userData.user && userData.user.username) || 'me';
+        
+        // Get portfolio
+        var resp = await fetch('/api/v1/users/' + currentUsername + '/portfolio', {
+            headers: getHeaders()
         });
-        const data = await response.json();
-
+        
+        if (!resp.ok) {
+            showError('❌ فشل تحميل الأعمال');
+            document.getElementById('loading').style.display = 'none';
+            return;
+        }
+        
+        var data = await resp.json();
+        
         if (data.portfolio && data.portfolio.length > 0) {
             renderPortfolio(data.portfolio);
         } else {
             document.getElementById('empty').style.display = 'block';
         }
     } catch(e) {
-        document.getElementById('empty').style.display = 'block';
+        showError('❌ خطأ في الاتصال: ' + e.message);
     }
+    
     document.getElementById('loading').style.display = 'none';
 }
 
+// ============================================
+// Render Portfolio - NO innerHTML
+// ============================================
 function renderPortfolio(items) {
-    document.getElementById('portfolioGrid').innerHTML = items.map(item => `
-        <div class="glass-card" style="position:relative;">
-            ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:12px;margin-bottom:8px;">` : ''}
-            <div style="font-weight:600;">${item.title}</div>
-            <p class="text-muted" style="font-size:11px;">${item.description || ''}</p>
-            <button class="btn btn-danger btn-sm" style="position:absolute;top:8px;left:8px;" onclick="deleteItem(${item.id})">🗑️</button>
-        </div>
-    `).join('');
+    var grid = document.getElementById('portfolioGrid');
+    // Clear safely
+    while (grid.firstChild) {
+        grid.removeChild(grid.firstChild);
+    }
+    
+    document.getElementById('empty').style.display = 'none';
+    
+    items.forEach(function(item) {
+        var card = document.createElement('div');
+        card.className = 'portfolio-card';
+        card.id = 'portfolio-item-' + item.id;
+        
+        // Image
+        if (item.image_url) {
+            var img = document.createElement('img');
+            img.src = item.image_url;
+            img.alt = item.title || '';
+            img.loading = 'lazy';
+            img.onerror = function() { this.style.display = 'none'; };
+            card.appendChild(img);
+        }
+        
+        // Body
+        var body = document.createElement('div');
+        body.className = 'card-body';
+        
+        var title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = item.title || 'بدون عنوان';
+        
+        var desc = document.createElement('p');
+        desc.className = 'card-desc';
+        desc.textContent = item.description || '';
+        
+        body.appendChild(title);
+        body.appendChild(desc);
+        card.appendChild(body);
+        
+        // Delete button
+        var actions = document.createElement('div');
+        actions.className = 'card-actions';
+        
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-icon-sm';
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.title = 'حذف';
+        deleteBtn.onclick = function() { showDeleteModal(item.id); };
+        
+        actions.appendChild(deleteBtn);
+        card.appendChild(actions);
+        
+        grid.appendChild(card);
+    });
 }
 
+// ============================================
+// Add Item
+// ============================================
 function showAddModal() {
     document.getElementById('addModal').style.display = 'flex';
+    document.getElementById('itemTitle').value = '';
+    document.getElementById('itemDesc').value = '';
+    document.getElementById('itemImage').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('modalError').style.display = 'none';
+}
+
+async function addItem() {
+    var title = document.getElementById('itemTitle').value.trim();
+    var description = document.getElementById('itemDesc').value.trim();
+    var image_url = document.getElementById('itemImage').value.trim();
+    var modalError = document.getElementById('modalError');
+    
+    if (!title) {
+        modalError.textContent = '⚠️ عنوان العمل مطلوب';
+        modalError.style.display = 'block';
+        return;
+    }
+    
+    modalError.style.display = 'none';
+    
+    try {
+        var resp = await fetch('/api/v1/users/portfolio', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ title: title, description: description, image_url: image_url })
+        });
+        
+        if (resp.ok) {
+            closeModal();
+            showSuccess('✅ تم إضافة العمل بنجاح');
+            loadPortfolio(); // Refresh grid
+        } else {
+            var err = await resp.json();
+            modalError.textContent = '❌ ' + (err.error || 'فشل الإضافة');
+            modalError.style.display = 'block';
+        }
+    } catch(e) {
+        modalError.textContent = '❌ خطأ في الاتصال';
+        modalError.style.display = 'block';
+    }
 }
 
 function closeModal() {
     document.getElementById('addModal').style.display = 'none';
 }
 
-async function addItem() {
-    const title = document.getElementById('itemTitle').value.trim();
-    const description = document.getElementById('itemDesc').value.trim();
-    const image_url = document.getElementById('itemImage').value.trim();
+// ============================================
+// Delete Item
+// ============================================
+var deleteItemId = null;
 
-    if (!title) { alert('العنوان مطلوب'); return; }
+function showDeleteModal(id) {
+    deleteItemId = id;
+    document.getElementById('deleteModal').style.display = 'flex';
+}
 
+async function confirmDelete() {
+    if (!deleteItemId) return;
+    
     try {
-        const token = localStorage.getItem('safesend_token');
-        await fetch('/api/v1/users/portfolio', {
-            method:'POST',
-            headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-            body:JSON.stringify({title,description,image_url})
+        var resp = await fetch('/api/v1/users/portfolio/' + deleteItemId, {
+            method: 'DELETE',
+            headers: getHeaders()
         });
-        closeModal();
-        location.reload();
+        
+        if (resp.ok) {
+            // Remove card from DOM without reload
+            var card = document.getElementById('portfolio-item-' + deleteItemId);
+            if (card) {
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.9)';
+                card.style.transition = 'all 0.3s';
+                setTimeout(function() {
+                    if (card.parentNode) card.parentNode.removeChild(card);
+                    // Check if grid is empty
+                    var grid = document.getElementById('portfolioGrid');
+                    if (!grid.firstChild) {
+                        document.getElementById('empty').style.display = 'block';
+                    }
+                }, 300);
+            }
+            showSuccess('✅ تم حذف العمل');
+        } else {
+            showError('❌ فشل حذف العمل');
+        }
     } catch(e) {
-        alert('❌ فشل الإضافة');
+        showError('❌ خطأ في الاتصال');
+    }
+    
+    closeDeleteModal();
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+    deleteItemId = null;
+}
+
+// ============================================
+// Image Preview
+// ============================================
+function previewImage() {
+    var url = document.getElementById('itemImage').value.trim();
+    var preview = document.getElementById('imagePreview');
+    
+    if (url) {
+        preview.src = url;
+        preview.style.display = 'block';
+        preview.onerror = function() { this.style.display = 'none'; };
+    } else {
+        preview.style.display = 'none';
     }
 }
 
-async function deleteItem(id) {
-    if (!confirm('حذف هذا العمل؟')) return;
-    try {
-        const token = localStorage.getItem('safesend_token');
-        await fetch(`/api/v1/users/portfolio/${id}`, {
-            method:'DELETE',
-            headers:{'Authorization':`Bearer ${token}`}
-        });
-        location.reload();
-    } catch(e) {}
-}
+// ============================================
+// Event Listeners
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('btnAdd').addEventListener('click', showAddModal);
+    document.getElementById('btnSave').addEventListener('click', addItem);
+    document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+    document.getElementById('btnConfirmDelete').addEventListener('click', confirmDelete);
+    document.getElementById('btnCancelDelete').addEventListener('click', closeDeleteModal);
+    
+    // Close modals on overlay click
+    document.getElementById('addModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+    document.getElementById('deleteModal').addEventListener('click', function(e) {
+        if (e.target === this) closeDeleteModal();
+    });
+});
 
+// Initial load
 loadPortfolio();
 </script>
 </body>

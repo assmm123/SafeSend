@@ -10,15 +10,16 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import structlog
+import uuid
 
+from src.app.models.database import get_db
+from src.app.models.dispute import Dispute, DisputeStatus, DisputeReasonCategory
+from src.app.models.deal import Deal
+from src.app.models.message import Message, MessageType
+from src.app.models.conversation import Conversation
 from src.app.models.deal_repository import DealRepository
 from src.app.models.security import decode_token
-from src.api.schemas import (
-    DisputeCreateSchema,
-    DisputeEvidenceSchema,
-    DisputeSchema,
-    validate_request
-)
+from src.api.schemas import DisputeSchema
 
 logger = structlog.get_logger(__name__)
 disputes_bp = Blueprint('disputes_v1', __name__, url_prefix='/api/v1/disputes')
@@ -36,8 +37,8 @@ def _get_user_id() -> Optional[int]:
     payload = decode_token(token)
     if payload and 'user_id' in payload:
         try:
-            return int(payload['user_id'])
-        except (ValueError, TypeError):
+            return payload['user_id']
+        except Exception:
             return None
     return None
 
@@ -51,22 +52,12 @@ def _require_auth():
         }), 401)
     return user_id, None
 
-def _get_deal_repo():
-    """Get deal repository instance."""
-    return DealRepository()
-
-# Temporary in-memory dispute store
-_disputes = {}
-_dispute_messages = {}
-_dispute_counter = 0
-
 # ============================================================
-# ⚠️ Dispute Management
+# ⚠️ Dispute Management - Real Database
 # ============================================================
 
 @disputes_bp.route('/open/<uuid:deal_uuid>', methods=['POST'])
-@validate_request(DisputeCreateSchema())
-def open_dispute(deal_uuid: str, validated_data: dict):
+def open_dispute(deal_uuid: str):
     """
     Open a dispute on a deal.
     فتح نزاع على صفقة.
@@ -74,62 +65,91 @@ def open_dispute(deal_uuid: str, validated_data: dict):
     user_id, error = _require_auth()
     if error:
         return error
-    
+
     try:
-        repo = _get_deal_repo()
-        deal = repo.get_by_uuid(str(deal_uuid))
+        data = request.get_json(silent=True) or {}
+        reason = data.get('reason', '')
+        reason_category = data.get('reason_category', DisputeReasonCategory.OTHER)
+        
+        if not reason:
+            return jsonify({
+                'error': 'Reason required',
+                'message_ar': 'السبب مطلوب'
+            }), 400
+        
+        db = next(get_db())
+        deal = db.query(Deal).filter(Deal.uuid == str(deal_uuid)).first()
         
         if not deal:
+            db.close()
             return jsonify({
                 'error': 'Deal not found',
                 'message_ar': 'الصفقة غير موجودة'
             }), 404
         
-        if deal.seller_id != user_id and deal.buyer_id != user_id:
+        if str(deal.seller_id) != str(user_id) and str(deal.buyer_id) != str(user_id):
+            db.close()
             return jsonify({
                 'error': 'Not a participant in this deal',
                 'message_ar': 'لست مشاركاً في هذه الصفقة'
             }), 403
         
         if deal.status not in ['funded', 'delivered']:
+            db.close()
             return jsonify({
                 'error': 'Deal not in disputable state',
                 'message_ar': 'الصفقة ليست في حالة قابلة للنزاع'
             }), 400
         
-        global _dispute_counter
-        _dispute_counter += 1
-        dispute_id = _dispute_counter
+        # Check for existing dispute
+        existing = db.query(Dispute).filter(
+            Dispute.deal_id == deal.uuid,
+            Dispute.status.in_([DisputeStatus.OPENED, DisputeStatus.UNDER_REVIEW, DisputeStatus.AWAITING_EVIDENCE])
+        ).first()
         
-        dispute = {
-            'id': dispute_id,
-            'dispute_uuid': str(deal_uuid),
-            'deal_id': deal.id,
-            'opened_by_id': user_id,
-            'reason': validated_data['reason'],
-            'reason_category': validated_data['reason_category'],
-            'evidence': [],
-            'status': 'opened',
-            'resolution': None,
-            'resolved_by_id': None,
-            'resolved_at': None,
-            'appealed_at': None,
-            'appeal_reason': None,
-            'created_at': datetime.now(timezone.utc)
-        }
+        if existing:
+            db.close()
+            return jsonify({
+                'error': 'Active dispute already exists',
+                'message_ar': 'يوجد نزاع نشط مسبقاً',
+                'dispute_id': str(existing.id)
+            }), 409
         
-        _disputes[dispute_id] = dispute
-        _dispute_messages[dispute_id] = []
+        # Create dispute
+        dispute = Dispute(
+            deal_id=deal.uuid,
+            opened_by_id=uuid.UUID(str(user_id).zfill(32)[:32]) if len(str(user_id)) < 32 else uuid.uuid4(),
+            reason=reason,
+            reason_category=reason_category,
+            status=DisputeStatus.OPENED,
+            evidence=[]
+        )
+        db.add(dispute)
         
         # Update deal status
-        repo.update_status(deal, 'disputed')
+        deal.status = 'disputed'
         
-        logger.info("dispute.opened", dispute_id=dispute_id, deal_id=deal.id)
+        db.commit()
+        db.refresh(dispute)
+        
+        dispute_id = str(dispute.id)
+        db.close()
+        
+        logger.info("dispute.opened", dispute_id=dispute_id, deal_uuid=str(deal_uuid))
         
         return jsonify({
             'message': 'Dispute opened',
             'message_ar': 'تم فتح النزاع',
-            'dispute': DisputeSchema().dump(dispute)
+            'dispute': {
+                'id': dispute_id,
+                'deal_id': str(deal_uuid),
+                'opened_by_id': user_id,
+                'reason': reason,
+                'reason_category': reason_category,
+                'status': DisputeStatus.OPENED,
+                'evidence': [],
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
         }), 201
         
     except Exception as e:
@@ -140,369 +160,227 @@ def open_dispute(deal_uuid: str, validated_data: dict):
         }), 500
 
 
-@disputes_bp.route('/<int:dispute_id>/evidence', methods=['POST'])
-@validate_request(DisputeEvidenceSchema())
-def add_evidence(dispute_id: int, validated_data: dict):
-    """
-    Add evidence to a dispute.
-    إضافة دليل للنزاع.
-    """
+@disputes_bp.route('/<dispute_id>/evidence', methods=['POST'])
+def add_evidence(dispute_id: str):
+    """Add evidence to a dispute in database. / إضافة دليل للنزاع."""
     user_id, error = _require_auth()
     if error:
         return error
-    
+
     try:
-        dispute = _disputes.get(dispute_id)
+        data = request.get_json(silent=True) or {}
+        description = data.get('description', '')
+        file_ids = data.get('file_ids', [])
+        
+        db = next(get_db())
+        dispute = db.query(Dispute).filter(Dispute.id == uuid.UUID(dispute_id)).first()
+        
         if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
+            db.close()
+            return jsonify({'error': 'Dispute not found', 'message_ar': 'النزاع غير موجود'}), 404
         
-        if dispute['opened_by_id'] != user_id:
-            return jsonify({
-                'error': 'Only dispute opener can add evidence',
-                'message_ar': 'فقط فاتح النزاع يمكنه إضافة أدلة'
-            }), 403
+        if str(dispute.opened_by_id).replace('-', '') != str(user_id):
+            db.close()
+            return jsonify({'error': 'Only dispute opener can add evidence', 'message_ar': 'فقط فاتح النزاع يمكنه إضافة أدلة'}), 403
         
-        if dispute['status'] not in ['opened', 'under_review', 'awaiting_evidence']:
-            return jsonify({
-                'error': 'Cannot add evidence in current status',
-                'message_ar': 'لا يمكن إضافة أدلة في الحالة الحالية'
-            }), 400
+        if dispute.status not in [DisputeStatus.OPENED, DisputeStatus.UNDER_REVIEW, DisputeStatus.AWAITING_EVIDENCE]:
+            db.close()
+            return jsonify({'error': 'Cannot add evidence in current status', 'message_ar': 'لا يمكن إضافة أدلة في الحالة الحالية'}), 400
         
-        evidence = {
-            'id': len(dispute['evidence']) + 1,
-            'description': validated_data['description'],
-            'file_ids': validated_data['file_ids'],
-            'added_at': datetime.now(timezone.utc).isoformat(),
-            'added_by': user_id
+        evidence_list = dispute.evidence or []
+        new_evidence = {
+            'id': len(evidence_list) + 1,
+            'description': description,
+            'file_ids': file_ids,
+            'added_by': user_id,
+            'added_at': datetime.now(timezone.utc).isoformat()
         }
+        evidence_list.append(new_evidence)
         
-        dispute['evidence'].append(evidence)
-        dispute['status'] = 'awaiting_evidence'
+        dispute.evidence = evidence_list
+        dispute.status = DisputeStatus.AWAITING_EVIDENCE
+        
+        db.commit()
+        db.close()
         
         logger.info("dispute.evidence_added", dispute_id=dispute_id)
         
         return jsonify({
             'message': 'Evidence added',
             'message_ar': 'تم إضافة الدليل',
-            'evidence': evidence
+            'evidence': new_evidence
         }), 200
         
     except Exception as e:
         logger.error("dispute.evidence_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to add evidence',
-            'message_ar': 'فشل إضافة الدليل'
-        }), 500
+        return jsonify({'error': 'Failed to add evidence', 'message_ar': 'فشل إضافة الدليل'}), 500
 
 
-@disputes_bp.route('/<int:dispute_id>/evidence/<int:evidence_index>', methods=['DELETE'])
-def remove_evidence(dispute_id: int, evidence_index: int):
-    """
-    Remove evidence from a dispute.
-    حذف دليل من النزاع.
-    """
+@disputes_bp.route('/<dispute_id>', methods=['GET'])
+def get_dispute(dispute_id: str):
+    """Get dispute details from database. / تفاصيل النزاع."""
     user_id, error = _require_auth()
     if error:
         return error
-    
-    try:
-        dispute = _disputes.get(dispute_id)
-        if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
-        
-        if dispute['opened_by_id'] != user_id:
-            return jsonify({
-                'error': 'Only dispute opener can remove evidence',
-                'message_ar': 'فقط فاتح النزاع يمكنه حذف الأدلة'
-            }), 403
-        
-        if evidence_index < 0 or evidence_index >= len(dispute['evidence']):
-            return jsonify({
-                'error': 'Evidence not found',
-                'message_ar': 'الدليل غير موجود'
-            }), 404
-        
-        removed = dispute['evidence'].pop(evidence_index)
-        
-        logger.info("dispute.evidence_removed", dispute_id=dispute_id, index=evidence_index)
-        
-        return jsonify({
-            'message': 'Evidence removed',
-            'message_ar': 'تم حذف الدليل'
-        }), 200
-        
-    except Exception as e:
-        logger.error("dispute.evidence_remove_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to remove evidence',
-            'message_ar': 'فشل حذف الدليل'
-        }), 500
 
-
-@disputes_bp.route('/<int:dispute_id>', methods=['GET'])
-def get_dispute(dispute_id: int):
-    """
-    Get dispute details.
-    تفاصيل النزاع.
-    """
-    user_id, error = _require_auth()
-    if error:
-        return error
-    
     try:
-        dispute = _disputes.get(dispute_id)
-        if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
+        db = next(get_db())
+        dispute = db.query(Dispute).filter(Dispute.id == uuid.UUID(dispute_id)).first()
         
-        return jsonify({
-            'dispute': DisputeSchema().dump(dispute)
-        }), 200
+        if not dispute:
+            db.close()
+            return jsonify({'error': 'Dispute not found', 'message_ar': 'النزاع غير موجود'}), 404
+        
+        result = {
+            'id': str(dispute.id),
+            'deal_id': str(dispute.deal_id),
+            'opened_by_id': str(dispute.opened_by_id),
+            'reason': dispute.reason,
+            'reason_category': dispute.reason_category,
+            'status': dispute.status,
+            'evidence': dispute.evidence or [],
+            'resolution': dispute.resolution,
+            'resolution_type': dispute.resolution_type,
+            'created_at': dispute.created_at.isoformat() if dispute.created_at else None,
+            'resolved_at': dispute.resolved_at.isoformat() if dispute.resolved_at else None
+        }
+        
+        db.close()
+        return jsonify({'dispute': result}), 200
         
     except Exception as e:
         logger.error("dispute.get_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to fetch dispute',
-            'message_ar': 'فشل جلب النزاع'
-        }), 500
+        return jsonify({'error': 'Failed to fetch dispute', 'message_ar': 'فشل جلب النزاع'}), 500
 
 
 @disputes_bp.route('/my-disputes', methods=['GET'])
 def my_disputes():
-    """
-    List user disputes.
-    قائمة نزاعات المستخدم.
-    """
+    """List user disputes from database. / قائمة نزاعات المستخدم."""
     user_id, error = _require_auth()
     if error:
         return error
-    
+
     try:
-        user_disputes = [
-            d for d in _disputes.values()
-            if d['opened_by_id'] == user_id
-        ]
+        db = next(get_db())
         
-        return jsonify({
-            'disputes': DisputeSchema().dump(user_disputes, many=True)
-        }), 200
+        # Query using string matching for UUID
+        disputes = db.query(Dispute).order_by(Dispute.created_at.desc()).all()
+        
+        # Filter by user_id (since UUID comparison is tricky)
+        user_disputes = []
+        for d in disputes:
+            try:
+                if str(d.opened_by_id).replace('-', '') == str(user_id):
+                    user_disputes.append({
+                        'id': str(d.id),
+                        'deal_id': str(d.deal_id),
+                        'reason': d.reason,
+                        'status': d.status,
+                        'created_at': d.created_at.isoformat() if d.created_at else None
+                    })
+            except Exception:
+                continue
+        
+        db.close()
+        return jsonify({'disputes': user_disputes}), 200
         
     except Exception as e:
         logger.error("dispute.list_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to list disputes',
-            'message_ar': 'فشل جلب النزاعات'
-        }), 500
+        return jsonify({'error': 'Failed to list disputes', 'message_ar': 'فشل جلب النزاعات'}), 500
 
 
-@disputes_bp.route('/<int:dispute_id>/message', methods=['POST'])
-def send_dispute_message(dispute_id: int):
-    """
-    Send message to mediator.
-    إرسال رسالة للوسيط.
-    """
+@disputes_bp.route('/<dispute_id>/appeal', methods=['POST'])
+def appeal_dispute(dispute_id: str):
+    """Appeal a dispute decision in database. / استئناف قرار النزاع."""
     user_id, error = _require_auth()
     if error:
         return error
-    
+
     try:
-        dispute = _disputes.get(dispute_id)
-        if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
-        
-        data = request.get_json(silent=True) or {}
-        content = data.get('content', '')
-        
-        if not content:
-            return jsonify({
-                'error': 'Message content required',
-                'message_ar': 'محتوى الرسالة مطلوب'
-            }), 400
-        
-        message = {
-            'id': len(_dispute_messages.get(dispute_id, [])) + 1,
-            'sender_id': user_id,
-            'content': content,
-            'created_at': datetime.now(timezone.utc).isoformat()
-        }
-        
-        if dispute_id not in _dispute_messages:
-            _dispute_messages[dispute_id] = []
-        _dispute_messages[dispute_id].append(message)
-        
-        logger.info("dispute.message_sent", dispute_id=dispute_id)
-        
-        return jsonify({
-            'message': 'Message sent',
-            'message_ar': 'تم إرسال الرسالة',
-            'data': message
-        }), 200
-        
-    except Exception as e:
-        logger.error("dispute.message_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to send message',
-            'message_ar': 'فشل إرسال الرسالة'
-        }), 500
-
-
-@disputes_bp.route('/<int:dispute_id>/messages', methods=['GET'])
-def dispute_messages(dispute_id: int):
-    """
-    Get dispute messages.
-    محادثة النزاع.
-    """
-    user_id, error = _require_auth()
-    if error:
-        return error
-    
-    try:
-        messages = _dispute_messages.get(dispute_id, [])
-        
-        return jsonify({
-            'dispute_id': dispute_id,
-            'messages': messages
-        }), 200
-        
-    except Exception as e:
-        logger.error("dispute.messages_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to fetch messages',
-            'message_ar': 'فشل جلب الرسائل'
-        }), 500
-
-
-@disputes_bp.route('/<int:dispute_id>/appeal', methods=['POST'])
-def appeal_dispute(dispute_id: int):
-    """
-    Appeal a dispute decision.
-    استئناف قرار النزاع.
-    """
-    user_id, error = _require_auth()
-    if error:
-        return error
-    
-    try:
-        dispute = _disputes.get(dispute_id)
-        if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
-        
-        if dispute['opened_by_id'] != user_id:
-            return jsonify({
-                'error': 'Only dispute opener can appeal',
-                'message_ar': 'فقط فاتح النزاع يمكنه الاستئناف'
-            }), 403
-        
-        if dispute['status'] not in ['resolved_buyer', 'resolved_seller', 'resolved_split']:
-            return jsonify({
-                'error': 'Dispute not yet resolved',
-                'message_ar': 'النزاع لم يحل بعد'
-            }), 400
-        
-        if dispute.get('appealed_at'):
-            return jsonify({
-                'error': 'Already appealed',
-                'message_ar': 'تم الاستئناف مسبقاً'
-            }), 400
-        
         data = request.get_json(silent=True) or {}
         reason = data.get('reason', '')
         
-        dispute['status'] = 'appealed'
-        dispute['appealed_at'] = datetime.now(timezone.utc)
-        dispute['appeal_reason'] = reason
+        db = next(get_db())
+        dispute = db.query(Dispute).filter(Dispute.id == uuid.UUID(dispute_id)).first()
+        
+        if not dispute:
+            db.close()
+            return jsonify({'error': 'Dispute not found', 'message_ar': 'النزاع غير موجود'}), 404
+        
+        if str(dispute.opened_by_id).replace('-', '') != str(user_id):
+            db.close()
+            return jsonify({'error': 'Only dispute opener can appeal', 'message_ar': 'فقط فاتح النزاع يمكنه الاستئناف'}), 403
+        
+        if dispute.status not in ['resolved_buyer', 'resolved_seller', 'resolved_split']:
+            db.close()
+            return jsonify({'error': 'Dispute not yet resolved', 'message_ar': 'النزاع لم يحل بعد'}), 400
+        
+        if dispute.appeal_reason:
+            db.close()
+            return jsonify({'error': 'Already appealed', 'message_ar': 'تم الاستئناف مسبقاً'}), 400
+        
+        dispute.status = 'appealed'
+        dispute.appeal_reason = reason
+        
+        db.commit()
+        db.close()
         
         logger.info("dispute.appealed", dispute_id=dispute_id)
-        
-        return jsonify({
-            'message': 'Appeal submitted',
-            'message_ar': 'تم تقديم الاستئناف'
-        }), 200
+        return jsonify({'message': 'Appeal submitted', 'message_ar': 'تم تقديم الاستئناف'}), 200
         
     except Exception as e:
         logger.error("dispute.appeal_failed", error=str(e))
-        return jsonify({
-            'error': 'Appeal failed',
-            'message_ar': 'فشل الاستئناف'
-        }), 500
+        return jsonify({'error': 'Appeal failed', 'message_ar': 'فشل الاستئناف'}), 500
 
 
-@disputes_bp.route('/<int:dispute_id>/timeline', methods=['GET'])
-def dispute_timeline(dispute_id: int):
-    """
-    Get dispute timeline.
-    الجدول الزمني للنزاع.
-    """
+@disputes_bp.route('/<dispute_id>/timeline', methods=['GET'])
+def dispute_timeline(dispute_id: str):
+    """Get dispute timeline from database. / الجدول الزمني للنزاع."""
     user_id, error = _require_auth()
     if error:
         return error
-    
+
     try:
-        dispute = _disputes.get(dispute_id)
+        db = next(get_db())
+        dispute = db.query(Dispute).filter(Dispute.id == uuid.UUID(dispute_id)).first()
+        
         if not dispute:
-            return jsonify({
-                'error': 'Dispute not found',
-                'message_ar': 'النزاع غير موجود'
-            }), 404
+            db.close()
+            return jsonify({'error': 'Dispute not found', 'message_ar': 'النزاع غير موجود'}), 404
         
-        timeline = [
-            {
-                'event': 'dispute_opened',
-                'timestamp': dispute['created_at'].isoformat(),
-                'description': 'Dispute was opened'
-            }
-        ]
+        timeline = [{
+            'event': 'dispute_opened',
+            'timestamp': dispute.created_at.isoformat() if dispute.created_at else None,
+            'description': 'تم فتح النزاع'
+        }]
         
-        for evidence in dispute.get('evidence', []):
+        for evidence in (dispute.evidence or []):
             timeline.append({
                 'event': 'evidence_added',
-                'timestamp': evidence['added_at'],
-                'description': evidence['description']
+                'timestamp': evidence.get('added_at'),
+                'description': evidence.get('description', '')
             })
         
-        if dispute.get('resolved_at'):
+        if dispute.resolved_at:
             timeline.append({
                 'event': 'dispute_resolved',
-                'timestamp': dispute['resolved_at'].isoformat(),
-                'description': f"Resolution: {dispute.get('resolution', '')}"
+                'timestamp': dispute.resolved_at.isoformat(),
+                'description': f"النتيجة: {dispute.resolution_type or dispute.resolution or ''}"
             })
         
-        if dispute.get('appealed_at'):
+        if dispute.appeal_reason:
             timeline.append({
                 'event': 'dispute_appealed',
-                'timestamp': dispute['appealed_at'].isoformat(),
-                'description': dispute.get('appeal_reason', '')
+                'timestamp': dispute.updated_at.isoformat() if dispute.updated_at else None,
+                'description': dispute.appeal_reason
             })
         
-        return jsonify({
-            'dispute_id': dispute_id,
-            'timeline': timeline
-        }), 200
+        db.close()
+        return jsonify({'dispute_id': dispute_id, 'timeline': timeline}), 200
         
     except Exception as e:
         logger.error("dispute.timeline_failed", error=str(e))
-        return jsonify({
-            'error': 'Failed to fetch timeline',
-            'message_ar': 'فشل جلب الجدول الزمني'
-        }), 500
+        return jsonify({'error': 'Failed to fetch timeline', 'message_ar': 'فشل جلب الجدول الزمني'}), 500
 
-
-# ============================================================
-# 📦 Export
-# ============================================================
 
 __all__ = ['disputes_bp']

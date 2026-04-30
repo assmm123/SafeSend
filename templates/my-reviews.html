@@ -1,41 +1,174 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" id="csrf-token">
     <title>SafeSend - تقييماتي</title>
     <link rel="stylesheet" href="/static/css/safesend.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .logo-circle {
+            width: 44px; height: 44px;
+            border-radius: 14px;
+            background: var(--primary);
+            color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px; flex-shrink: 0;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .summary-card {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .avg-rating { font-size: 48px; font-weight: 900; color: var(--primary); }
+        .stars-display { font-size: 24px; margin-top: 4px; }
+        
+        .breakdown-card {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .breakdown-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .breakdown-label { font-size: 12px; width: 24px; text-align: left; }
+        .breakdown-bar-bg {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-secondary, rgba(255,255,255,0.1));
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .breakdown-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: var(--primary);
+            transition: width 0.5s ease;
+        }
+        .breakdown-count { font-size: 11px; color: var(--text-muted); width: 28px; text-align: right; }
+        
+        .review-card {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+        }
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .review-author { font-weight: 600; font-size: 14px; }
+        .review-stars { color: #f5a623; font-size: 14px; }
+        .review-rating-num { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+        .review-comment { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 4px; }
+        .review-date { font-size: 11px; color: var(--text-muted); }
+        .review-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-light);
+        }
+        .review-detail-item { font-size: 11px; color: var(--text-muted); }
+        .review-detail-item span { color: var(--text); font-weight: 600; }
+        
+        .filter-chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+        .filter-chip {
+            padding: 5px 12px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--surface);
+            color: var(--text);
+            transition: all 0.2s;
+        }
+        .filter-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .filter-chip:hover:not(.active) { background: var(--surface-hover); }
+        
+        .error-msg {
+            background: rgba(255,75,106,0.1);
+            border: 1px solid rgba(255,75,106,0.3);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--danger);
+            text-align: center;
+            margin: 12px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .review-details { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
-<body style="padding:20px;">
+<body style="background:var(--bg);color:var(--text);font-family:Tajawal;padding:20px;min-height:100vh;">
 
 <div class="container" style="padding-bottom:100px;">
 
+    <!-- Header -->
     <div class="header">
         <div style="display:flex;align-items:center;gap:14px;">
             <div class="logo-circle">S</div>
             <div>
-                <h1 style="font-size:22px;font-weight:800;">⭐ تقييماتي</h1>
-                <p style="font-size:12px;color:var(--text-muted);">جميع التقييمات التي تلقيتها</p>
+                <h1 style="font-size:22px;font-weight:800;margin:0;">⭐ تقييماتي</h1>
+                <p style="font-size:12px;color:var(--text-muted);margin:0;">جميع التقييمات التي تلقيتها</p>
             </div>
         </div>
     </div>
 
-    <div id="summary" class="glass-card text-center" style="padding:20px;">
-        <div style="font-size:48px;font-weight:900;color:var(--primary);" id="avgRating">---</div>
-        <div style="font-size:24px;" id="starsDisplay"></div>
+    <!-- Summary -->
+    <div class="summary-card">
+        <div class="avg-rating" id="avgRating">---</div>
+        <div class="stars-display" id="starsDisplay"></div>
         <p class="text-muted mt-2"><span id="totalReviews">0</span> تقييم</p>
     </div>
 
-    <div class="glass-card mt-3" id="breakdownCard">
-        <p style="font-weight:600;font-size:13px;margin-bottom:8px;">توزيع التقييمات</p>
+    <!-- Breakdown -->
+    <div class="breakdown-card">
+        <p style="font-weight:600;font-size:13px;margin:0 0 10px;">📊 توزيع التقييمات</p>
         <div id="breakdown"></div>
     </div>
 
-    <div id="reviewsList" style="margin-top:12px;"></div>
+    <!-- Filter -->
+    <div class="filter-chips">
+        <span class="filter-chip active" data-filter="all">الكل</span>
+        <span class="filter-chip" data-filter="5">⭐⭐⭐⭐⭐</span>
+        <span class="filter-chip" data-filter="4">⭐⭐⭐⭐</span>
+        <span class="filter-chip" data-filter="3">⭐⭐⭐</span>
+        <span class="filter-chip" data-filter="2">⭐⭐</span>
+        <span class="filter-chip" data-filter="1">⭐</span>
+    </div>
+
+    <!-- Reviews List -->
+    <div id="reviewsList"></div>
+
+    <!-- States -->
     <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
     <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد تقييمات بعد</p>
+    <p id="noResults" class="text-center text-muted" style="display:none;padding:40px;">لا توجد تقييمات بهذا التصنيف</p>
+    <div id="errorMsg" class="error-msg" style="display:none;"></div>
 
+    <!-- Bottom Nav -->
     <div class="bottom-nav">
         <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
         <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
@@ -46,76 +179,281 @@
 </div>
 
 <script>
+// ============================================
+// Theme
+// ============================================
+(function() {
+    var theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+})();
+
+// ============================================
+// Helpers
+// ============================================
+var token = localStorage.getItem('safesend_token');
+var allReviews = [];
+var currentFilter = 'all';
+
+function getCSRFToken() {
+    var el = document.getElementById('csrf-token');
+    return el ? el.getAttribute('content') : '';
+}
+
+function getHeaders() {
+    var h = { 'Authorization': 'Bearer ' + token };
+    var csrf = getCSRFToken();
+    if (csrf) h['X-CSRF-Token'] = csrf;
+    return h;
+}
+
+function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+    setTimeout(function() { el.style.display = 'none'; }, 5000);
+}
+
+function getOverallRating(r) {
+    return (r.communication_rating + r.quality_rating + r.speed_rating + r.accuracy_rating) / 4;
+}
+
+// ============================================
+// Load Reviews
+// ============================================
 async function loadReviews() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('noResults').style.display = 'none';
+    
     try {
-        const token = localStorage.getItem('safesend_token');
-        const response = await fetch('/api/v1/auth/me', {
-            headers: {'Authorization': `Bearer ${token}`}
+        // Get username
+        var meResp = await fetch('/api/v1/auth/me', { headers: getHeaders() });
+        if (!meResp.ok) {
+            showError('❌ فشل تحميل الملف الشخصي');
+            return;
+        }
+        var userData = await meResp.json();
+        var username = (userData.user && userData.user.username) || 'me';
+        
+        // Get reviews
+        var resp = await fetch('/api/v1/users/' + username + '/reviews', {
+            headers: getHeaders()
         });
-        const userData = await response.json();
-        const username = userData.user?.username || 'me';
-
-        const reviewsResponse = await fetch(`/api/v1/users/${username}/reviews`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        const data = await reviewsResponse.json();
-
+        
+        if (!resp.ok) {
+            showError('❌ فشل تحميل التقييمات');
+            return;
+        }
+        
+        var data = await resp.json();
+        
         if (data.reviews && data.reviews.length > 0) {
+            allReviews = data.reviews;
             renderSummary(data);
             renderBreakdown(data.reviews);
-            renderReviews(data.reviews);
+            filterReviews();
         } else {
             document.getElementById('empty').style.display = 'block';
         }
     } catch(e) {
-        document.getElementById('empty').style.display = 'block';
+        showError('❌ خطأ في الاتصال: ' + e.message);
     }
+    
     document.getElementById('loading').style.display = 'none';
 }
 
+// ============================================
+// Render Summary
+// ============================================
 function renderSummary(data) {
-    const avg = data.average_rating || 0;
-    const total = data.total || data.reviews.length;
+    var avg = data.average_rating || 0;
+    var total = data.total || data.reviews.length;
     
     document.getElementById('avgRating').textContent = avg.toFixed(1);
     document.getElementById('starsDisplay').textContent = '⭐'.repeat(Math.round(avg));
     document.getElementById('totalReviews').textContent = total;
 }
 
+// ============================================
+// Render Breakdown - NO innerHTML
+// ============================================
 function renderBreakdown(reviews) {
-    const dist = [0,0,0,0,0];
-    reviews.forEach(r => {
-        const overall = (r.communication_rating + r.quality_rating + r.speed_rating + r.accuracy_rating) / 4;
-        const star = Math.round(overall);
-        if (star >= 1 && star <= 5) dist[star-1]++;
-    });
-    const total = reviews.length;
+    var container = document.getElementById('breakdown');
+    while (container.firstChild) container.removeChild(container.firstChild);
     
-    document.getElementById('breakdown').innerHTML = [5,4,3,2,1].map(star => {
-        const count = dist[star-1];
-        const pct = total > 0 ? (count/total*100) : 0;
-        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-            <span style="font-size:11px;width:20px;">${star}⭐</span>
-            <div class="progress" style="flex:1;"><div class="progress-bar" style="width:${pct}%;"></div></div>
-            <span style="font-size:10px;color:var(--text-muted);width:30px;">${count}</span>
-        </div>`;
-    }).join('');
+    var dist = [0, 0, 0, 0, 0];
+    reviews.forEach(function(r) {
+        var overall = getOverallRating(r);
+        var star = Math.round(overall);
+        if (star >= 1 && star <= 5) dist[star - 1]++;
+    });
+    
+    var total = reviews.length;
+    
+    [5, 4, 3, 2, 1].forEach(function(star) {
+        var count = dist[star - 1];
+        var pct = total > 0 ? (count / total * 100) : 0;
+        
+        var row = document.createElement('div');
+        row.className = 'breakdown-row';
+        
+        var label = document.createElement('span');
+        label.className = 'breakdown-label';
+        label.textContent = star + '⭐';
+        
+        var barBg = document.createElement('div');
+        barBg.className = 'breakdown-bar-bg';
+        
+        var barFill = document.createElement('div');
+        barFill.className = 'breakdown-bar-fill';
+        barFill.style.width = pct + '%';
+        if (star >= 4) barFill.style.background = 'var(--accent)';
+        else if (star >= 3) barFill.style.background = '#f5a623';
+        else barFill.style.background = 'var(--danger)';
+        
+        barBg.appendChild(barFill);
+        
+        var countSpan = document.createElement('span');
+        countSpan.className = 'breakdown-count';
+        countSpan.textContent = count;
+        
+        row.appendChild(label);
+        row.appendChild(barBg);
+        row.appendChild(countSpan);
+        container.appendChild(row);
+    });
+}
+
+// ============================================
+// Filter & Render Reviews - NO innerHTML
+// ============================================
+function filterReviews() {
+    var filtered = allReviews;
+    
+    if (currentFilter !== 'all') {
+        var starFilter = parseInt(currentFilter);
+        filtered = allReviews.filter(function(r) {
+            return Math.round(getOverallRating(r)) === starFilter;
+        });
+    }
+    
+    renderReviews(filtered);
+}
+
+function setFilter(filter) {
+    currentFilter = filter;
+    
+    var chips = document.querySelectorAll('.filter-chip');
+    chips.forEach(function(c) { c.classList.remove('active'); });
+    var active = document.querySelector('.filter-chip[data-filter="' + filter + '"]');
+    if (active) active.classList.add('active');
+    
+    filterReviews();
 }
 
 function renderReviews(reviews) {
-    document.getElementById('reviewsList').innerHTML = reviews.map(r => {
-        const overall = ((r.communication_rating + r.quality_rating + r.speed_rating + r.accuracy_rating) / 4).toFixed(1);
-        return `<div class="glass-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="font-weight:600;">${r.reviewer_name || 'مستخدم'}</span>
-                <span>${'⭐'.repeat(Math.round(overall))} ${overall}</span>
-            </div>
-            <p class="text-muted mt-1">${r.comment || ''}</p>
-            <p class="text-muted" style="font-size:10px;">${r.created_at ? new Date(r.created_at).toLocaleDateString('ar-SA') : ''}</p>
-        </div>`;
-    }).join('');
+    var container = document.getElementById('reviewsList');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('noResults').style.display = 'none';
+    
+    if (!reviews.length) {
+        if (allReviews.length > 0) {
+            document.getElementById('noResults').style.display = 'block';
+        } else {
+            document.getElementById('empty').style.display = 'block';
+        }
+        return;
+    }
+    
+    reviews.forEach(function(r) {
+        var overall = getOverallRating(r).toFixed(1);
+        var stars = Math.round(parseFloat(overall));
+        
+        var card = document.createElement('div');
+        card.className = 'review-card';
+        
+        // Header
+        var header = document.createElement('div');
+        header.className = 'review-header';
+        
+        var author = document.createElement('span');
+        author.className = 'review-author';
+        author.textContent = r.reviewer_name || 'مستخدم';
+        
+        var ratingDiv = document.createElement('div');
+        
+        var starsSpan = document.createElement('span');
+        starsSpan.className = 'review-stars';
+        starsSpan.textContent = '⭐'.repeat(stars);
+        
+        var numSpan = document.createElement('span');
+        numSpan.className = 'review-rating-num';
+        numSpan.textContent = overall;
+        
+        ratingDiv.appendChild(numSpan);
+        ratingDiv.appendChild(starsSpan);
+        
+        header.appendChild(author);
+        header.appendChild(ratingDiv);
+        
+        // Comment
+        var comment = document.createElement('p');
+        comment.className = 'review-comment';
+        comment.textContent = r.comment || '';
+        
+        // Date
+        var date = document.createElement('p');
+        date.className = 'review-date';
+        date.textContent = r.created_at ? new Date(r.created_at).toLocaleDateString('ar-SA') : '';
+        
+        // Details
+        var details = document.createElement('div');
+        details.className = 'review-details';
+        
+        var detailItems = [
+            { label: '💬 تواصل', value: r.communication_rating },
+            { label: '✨ جودة', value: r.quality_rating },
+            { label: '⚡ سرعة', value: r.speed_rating },
+            { label: '🎯 دقة', value: r.accuracy_rating }
+        ];
+        
+        detailItems.forEach(function(d) {
+            var item = document.createElement('div');
+            item.className = 'review-detail-item';
+            item.textContent = d.label + ': ';
+            
+            var valSpan = document.createElement('span');
+            valSpan.textContent = d.value ? d.value + '/5' : '-';
+            item.appendChild(valSpan);
+            
+            details.appendChild(item);
+        });
+        
+        card.appendChild(header);
+        if (r.comment) card.appendChild(comment);
+        card.appendChild(date);
+        card.appendChild(details);
+        container.appendChild(card);
+    });
 }
 
+// ============================================
+// Event Listeners
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.filter-chip').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            setFilter(this.dataset.filter);
+        });
+    });
+});
+
+// Initial load
 loadReviews();
 </script>
 </body>

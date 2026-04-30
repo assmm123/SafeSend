@@ -8,6 +8,7 @@ User Model
 - حذف ناعم واستعادة
 - قفل الحساب بعد محاولات فاشلة
 - تتبع النشاط
+- مصادقة ثنائية (2FA)
 """
 
 import uuid
@@ -40,6 +41,7 @@ ROLES = [UserRole.ADMIN, UserRole.MODERATOR, UserRole.SELLER, UserRole.BUYER, Us
 
 MAX_FAILED_ATTEMPTS = 15
 LOCK_TIMES = {5: 5, 10: 30, 15: 1440}  # محاولات -> دقائق قفل
+BACKUP_CODES_COUNT = 8  # عدد الرموز الاحتياطية
 
 
 # ============================================
@@ -59,6 +61,9 @@ class User(BaseModel):
         role (str): دور المستخدم
         is_active (bool): هل الحساب نشط؟
         deleted_at (datetime): تاريخ الحذف الناعم
+        is_2fa_enabled (bool): هل المصادقة الثنائية مفعلة؟
+        encrypted_2fa_secret (str): مفتاح TOTP مشفر
+        backup_codes (list): رموز احتياطية مشفرة
     """
     
     __tablename__ = "users"
@@ -181,10 +186,10 @@ class User(BaseModel):
         doc="هل هو مدير؟ (للتوافق)"
     )
     
-    permissions: Mapped[Optional[dict]] = mapped_column(
+    permissions: Mapped[Optional[list]] = mapped_column(
         JSON,
         nullable=True,
-        default=list,
+        default=None,
         doc="صلاحيات إضافية"
     )
     
@@ -195,7 +200,7 @@ class User(BaseModel):
     preferences: Mapped[Optional[dict]] = mapped_column(
         JSON,
         nullable=True,
-        default=dict,
+        default=None,
         doc="إعدادات المستخدم (لغة، ثيم، إشعارات)"
     )
     
@@ -226,6 +231,43 @@ class User(BaseModel):
         DateTime(timezone=True),
         nullable=True,
         doc="تاريخ إرسال توكن إعادة التعيين"
+    )
+    
+    # ============================================
+    # المصادقة الثنائية - Two-Factor Authentication
+    # ============================================
+    
+    is_2fa_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="هل المصادقة الثنائية مفعلة؟"
+    )
+    
+    encrypted_2fa_secret: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        doc="مفتاح TOTP مشفر"
+    )
+    
+    backup_codes: Mapped[Optional[list]] = mapped_column(
+        JSON,
+        nullable=True,
+        default=None,
+        doc="رموز احتياطية مشفرة (للاستخدام لمرة واحدة)"
+    )
+    
+    used_backup_codes_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="عدد الرموز الاحتياطية المستخدمة"
+    )
+    
+    two_fa_enabled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="تاريخ تفعيل المصادقة الثنائية"
     )
     
     # ============================================
@@ -299,6 +341,13 @@ class User(BaseModel):
         """هل الملف الشخصي مكتمل؟"""
         return self.full_name is not None and self.phone is not None
     
+    @property
+    def remaining_backup_codes(self) -> int:
+        """عدد الرموز الاحتياطية المتبقية"""
+        if self.backup_codes is None:
+            return 0
+        return len(self.backup_codes)
+    
     # ============================================
     # دوال كلمة المرور
     # ============================================
@@ -331,7 +380,7 @@ class User(BaseModel):
     def restore(self) -> None:
         """استعادة المستخدم المحذوف"""
         self.deleted_at = None
-        self.is_active = True  # هذا السطر مهم! (من مخاطر.txt)
+        self.is_active = True
     
     # ============================================
     # دوال قفل الحساب
@@ -385,10 +434,6 @@ class User(BaseModel):
     def is_role_admin(self) -> bool:
         """هل المستخدم مدير؟"""
         return self.role == UserRole.ADMIN or bool(self.is_admin)
-        """هل المستخدم مدير؟"""
-        return self.role == UserRole.ADMIN or self.is_admin
-        """هل المستخدم مدير؟"""
-        return self.role == UserRole.ADMIN or self.is_admin
     
     def can_moderate(self) -> bool:
         """هل يمكنه الإشراف؟"""
@@ -495,8 +540,130 @@ class User(BaseModel):
         self.password_reset_sent_at = None
     
     # ============================================
-    # دوال الإعدادات
+    # دوال المصادقة الثنائية - 2FA Methods
     # ============================================
+    
+    def setup_2fa(self, secret: str) -> str:
+        """
+        تفعيل إعداد المصادقة الثنائية
+        Set up 2FA with encrypted secret
+        Returns provisioning URI for QR code
+        """
+        import pyotp
+        from src.app.models.security import encrypt_data
+        
+        self.encrypted_2fa_secret = encrypt_data(secret)
+        self.is_2fa_enabled = True
+        self.two_fa_enabled_at = utc_now()
+        
+        totp = pyotp.TOTP(secret)
+        return totp.provisioning_uri(
+            name=self.email,
+            issuer_name="SafeSend"
+        )
+    
+    def disable_2fa(self) -> None:
+        """
+        تعطيل المصادقة الثنائية
+        Disable 2FA and clear all related data
+        """
+        self.encrypted_2fa_secret = None
+        self.backup_codes = None
+        self.is_2fa_enabled = False
+        self.used_backup_codes_count = 0
+        self.two_fa_enabled_at = None
+    
+    def get_2fa_secret(self) -> Optional[str]:
+        """
+        استرجاع مفتاح 2FA بعد فك التشفير
+        Get decrypted 2FA secret
+        """
+        if not self.encrypted_2fa_secret:
+            return None
+        from src.app.models.security import decrypt_data
+        try:
+            return decrypt_data(self.encrypted_2fa_secret)
+        except Exception:
+            return None
+    
+    def verify_2fa_code(self, code: str) -> bool:
+        """
+        التحقق من رمز 2FA باستخدام TOTP حقيقي
+        Verify 2FA code using real TOTP
+        """
+        import pyotp
+        
+        if not self.is_2fa_enabled:
+            return False
+        
+        secret = self.get_2fa_secret()
+        if not secret:
+            return False
+        
+        try:
+            totp = pyotp.TOTP(secret)
+            return totp.verify(code)
+        except Exception:
+            return False
+    
+    def set_backup_codes(self, codes: list) -> None:
+        """
+        تعيين الرموز الاحتياطية (تشفيرها قبل التخزين)
+        Set encrypted backup codes
+        """
+        from src.app.models.security import encrypt_data
+        encrypted = [encrypt_data(str(code)) for code in codes]
+        self.backup_codes = encrypted
+        self.used_backup_codes_count = 0
+    
+    def verify_backup_code(self, code: str) -> bool:
+        """
+        التحقق من رمز احتياطي (استخدام مرة واحدة)
+        Verify a backup code - one-time use only
+        """
+        from src.app.models.security import decrypt_data, constant_time_compare
+        
+        if not self.backup_codes:
+            return False
+        
+        for i, encrypted_code in enumerate(self.backup_codes):
+            try:
+                decrypted = decrypt_data(encrypted_code)
+                if constant_time_compare(decrypted, str(code)):
+                    # إزالة الرمز المستخدم (استخدام مرة واحدة)
+                    self.backup_codes.pop(i)
+                    self.used_backup_codes_count += 1
+                    return True
+            except Exception:
+                continue
+        
+        return False
+    
+    def generate_2fa_qr_code(self, issuer: str = "SafeSend") -> Optional[str]:
+        """
+        توليد QR code للمصادقة الثنائية بصيغة base64
+        Generate QR code for 2FA setup as base64 PNG
+        """
+        import qrcode
+        import io
+        import base64
+        import pyotp
+        
+        secret = self.get_2fa_secret()
+        if not secret:
+            return None
+        
+        totp = pyotp.TOTP(secret)
+        uri = totp.provisioning_uri(name=self.email, issuer_name=issuer)
+        
+        img = qrcode.make(uri)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    # ============================================
+    # دوال الإعدادات - Preferences M
+  # ============================================
     
     def get_preference(self, key: str, default: Any = None) -> Any:
         """جلب إعداد"""
@@ -527,6 +694,7 @@ class User(BaseModel):
             "bio": self.bio,
             "location": self.location,
             "role": self.role,
+            "is_2fa_enabled": self.is_2fa_enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
     
@@ -546,9 +714,11 @@ class User(BaseModel):
             "is_active": self.is_active,
             "is_verified": self.is_verified,
             "email_verified": self.email_verified,
+            "is_2fa_enabled": self.is_2fa_enabled,
             "is_deleted": self.is_deleted,
             "is_locked": self.is_locked,
             "failed_attempts": self.failed_attempts,
+            "remaining_backup_codes": self.remaining_backup_codes,
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
             "login_count": self.login_count,
@@ -563,7 +733,7 @@ class User(BaseModel):
         return data
     
     def __repr__(self) -> str:
-        return f"<User id={self.id} email={self.email} role={self.role}>"
+        return f"<User id={self.id} email={self.email} role={self.role} 2fa={self.is_2fa_enabled}>"
 
 
 __all__ = [
@@ -572,4 +742,5 @@ __all__ = [
     "ROLES",
     "MAX_FAILED_ATTEMPTS",
     "LOCK_TIMES",
+    "BACKUP_CODES_COUNT",
 ]

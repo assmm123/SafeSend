@@ -75,7 +75,10 @@ class UserRepository(IUserRepository):
     # عمليات القراءة
     # ============================================
     
-    def get_by_id(self, user_id: UUID) -> Optional[User]:
+    def get_by_id(self, user_id) -> Optional[User]:
+        import uuid
+        if isinstance(user_id, str):
+            user_id = uuid.UUID(user_id)
         """جلب مستخدم بواسطة المعرف"""
         return self.session.query(User).filter(
             User.id == user_id,
@@ -560,6 +563,19 @@ class UserRepository(IUserRepository):
         token = user.generate_password_reset_token()
         self.session.flush()
         return token
+
+
+
+
+# ============================================
+# Helper - Get Repository with DB Session
+# ============================================
+
+def get_user_repo():
+    """Get UserRepository instance with database session."""
+    from src.app.models.database import get_db
+    db = next(get_db())
+    return UserRepository(db)
 
 
 __all__ = [

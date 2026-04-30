@@ -1,1 +1,7 @@
 .env
+.env
+nexus_dev.db
+backups/
+__pycache__/
+*.pyc
+uploads/

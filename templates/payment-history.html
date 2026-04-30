@@ -1,40 +1,120 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" id="csrf-token">
     <title>SafeSend - سجل المدفوعات</title>
     <link rel="stylesheet" href="/static/css/safesend.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .logo-circle {
+            width: 44px; height: 44px;
+            border-radius: 14px;
+            background: var(--primary);
+            color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px; flex-shrink: 0;
+        }
+        .chip {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px; font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            color: var(--text);
+            background: var(--surface);
+            transition: all 0.2s;
+        }
+        .chip:hover { background: var(--primary); color: white; border-color: var(--primary); }
+        .chip-primary { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px; font-weight: 600;
+        }
+        .badge-success { background: rgba(34,228,172,0.15); color: var(--accent); }
+        .badge-warning { background: rgba(255,165,0,0.15); color: orange; }
+        .badge-danger { background: rgba(255,75,106,0.15); color: var(--danger); }
+        
+        .payment-card {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .payment-card:hover { background: var(--surface-hover); }
+        .payment-info { flex: 1; min-width: 0; }
+        .payment-title { font-weight: 600; font-size: 13px; }
+        .payment-date { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .payment-hash { font-size: 10px; color: var(--text-muted); font-family: monospace; cursor: pointer; }
+        .payment-amount { font-weight: 800; font-size: 16px; flex-shrink: 0; text-align: left; }
+        .payment-amount.positive { color: var(--accent); }
+        .payment-amount.negative { color: var(--danger); }
+        
+        .error-msg {
+            background: rgba(255,75,106,0.1);
+            border: 1px solid rgba(255,75,106,0.3);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--danger);
+            text-align: center;
+            margin: 12px 0;
+        }
+        .header { margin-bottom: 20px; }
+        
+        @media (max-width: 768px) {
+            .payment-title { font-size: 12px; }
+            .payment-amount { font-size: 14px; }
+        }
+    </style>
 </head>
-<body style="padding:20px;">
+<body style="background:var(--bg);color:var(--text);font-family:Tajawal;padding:20px;min-height:100vh;">
 
 <div class="container" style="padding-bottom:100px;">
 
+    <!-- Header -->
     <div class="header">
         <div style="display:flex;align-items:center;gap:14px;">
             <div class="logo-circle">S</div>
             <div>
-                <h1 style="font-size:22px;font-weight:800;">سجل المدفوعات</h1>
-                <p style="font-size:12px;color:var(--text-muted);">جميع معاملاتي المالية</p>
+                <h1 style="font-size:22px;font-weight:800;margin:0;">سجل المدفوعات</h1>
+                <p style="font-size:12px;color:var(--text-muted);margin:0;">جميع معاملاتي المالية</p>
             </div>
         </div>
     </div>
 
-    <input class="input" type="text" id="searchInput" placeholder="🔍 بحث في المدفوعات..." oninput="filterPayments()">
+    <!-- Search -->
+    <input class="input" type="text" id="searchInput" placeholder="🔍 بحث في المدفوعات...">
 
+    <!-- Filters -->
     <div style="display:flex;gap:8px;margin:12px 0;">
-        <div class="chip chip-primary" onclick="filterByType('all')" id="chipAll">الكل</div>
-        <div class="chip" onclick="filterByType('received')" id="chipReceived">📥 وارد</div>
-        <div class="chip" onclick="filterByType('sent')" id="chipSent">📤 صادر</div>
+        <span class="chip chip-primary" data-filter="all" id="chipAll">الكل</span>
+        <span class="chip" data-filter="received" id="chipReceived">📥 وارد</span>
+        <span class="chip" data-filter="sent" id="chipSent">📤 صادر</span>
     </div>
 
+    <!-- Payments List -->
     <div id="paymentsList"></div>
+
+    <!-- States -->
     <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
     <p id="empty" class="text-center text-muted" style="display:none;padding:40px;">لا توجد مدفوعات</p>
+    <p id="noResults" class="text-center text-muted" style="display:none;padding:40px;">لا توجد نتائج للبحث</p>
+    <div id="errorMsg" class="error-msg" style="display:none;"></div>
 
-    <button id="loadMore" class="btn btn-outline btn-block mt-3" style="display:none;" onclick="loadMore()">تحميل المزيد</button>
+    <!-- Load More -->
+    <button id="loadMore" class="btn btn-outline btn-block mt-3" style="display:none;">تحميل المزيد</button>
 
+    <!-- Bottom Nav -->
     <div class="bottom-nav">
         <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
         <a href="/chat" class="nav-item"><span class="nav-icon">💬</span>محادثات</a>
@@ -45,86 +125,261 @@
 </div>
 
 <script>
-let allPayments = [];
-let filteredPayments = [];
-let currentFilter = 'all';
-let page = 1;
+// ============================================
+// Theme
+// ============================================
+(function() {
+    var theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+})();
 
-async function loadPayments() {
-    document.getElementById('loading').style.display = 'block';
-    try {
-        const token = localStorage.getItem('safesend_token');
-        const response = await fetch(`/api/v1/payments/history?page=${page}`, {
-            headers: {'Authorization': `Bearer ${token}`}
+// ============================================
+// Helpers
+// ============================================
+var token = localStorage.getItem('safesend_token');
+
+function getCSRFToken() {
+    var el = document.getElementById('csrf-token');
+    return el ? el.getAttribute('content') : '';
+}
+
+function getHeaders() {
+    var h = { 'Authorization': 'Bearer ' + token };
+    var csrf = getCSRFToken();
+    if (csrf) h['X-CSRF-Token'] = csrf;
+    return h;
+}
+
+function formatCurrency(n) {
+    if (typeof n !== 'number') return n;
+    return n.toLocaleString('ar-SA');
+}
+
+function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('noResults').style.display = 'none';
+}
+
+function hideMessages() {
+    document.getElementById('errorMsg').style.display = 'none';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('noResults').style.display = 'none';
+}
+
+function copyHash(hash) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(hash).then(function() {
+            alert('✅ تم نسخ معرف المعاملة');
         });
-        const data = await response.json();
+    } else {
+        // Fallback
+        var ta = document.createElement('textarea');
+        ta.value = hash;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        alert('✅ تم نسخ معرف المعاملة');
+    }
+}
+
+// ============================================
+// State
+// ============================================
+var allPayments = [];
+var filteredPayments = [];
+var currentFilter = 'all';
+var page = 1;
+
+// ============================================
+// Load Payments from API
+// ============================================
+async function loadPayments() {
+    hideMessages();
+    document.getElementById('loading').style.display = 'block';
+    
+    try {
+        var response = await fetch('/api/v1/payments/history?page=' + page, {
+            headers: getHeaders()
+        });
+        
+        if (!response.ok) {
+            showError('❌ فشل تحميل المدفوعات. الرجاء المحاولة لاحقاً.');
+            return;
+        }
+        
+        var data = await response.json();
         
         if (data.payments && data.payments.length > 0) {
-            allPayments = [...allPayments, ...data.payments];
+            allPayments = allPayments.concat(data.payments);
             filterPayments();
+            
             if (data.pagination && data.pagination.has_next) {
                 document.getElementById('loadMore').style.display = 'block';
             } else {
                 document.getElementById('loadMore').style.display = 'none';
             }
         } else {
-            document.getElementById('empty').style.display = 'block';
+            if (page === 1) {
+                document.getElementById('empty').style.display = 'block';
+            }
+            document.getElementById('loadMore').style.display = 'none';
         }
     } catch(e) {
-        document.getElementById('empty').style.display = 'block';
+        showError('❌ خطأ في الاتصال: ' + e.message);
     }
+    
     document.getElementById('loading').style.display = 'none';
 }
 
+// ============================================
+// Filter Payments
+// ============================================
 function filterPayments() {
-    const query = document.getElementById('searchInput').value.toLowerCase();
-    filteredPayments = allPayments.filter(p => {
-        const matchesSearch = !query || 
-            (p.deal_title && p.deal_title.toLowerCase().includes(query)) ||
-            (p.tx_hash && p.tx_hash.toLowerCase().includes(query));
-        const matchesFilter = currentFilter === 'all' || 
+    var query = document.getElementById('searchInput').value.toLowerCase();
+    
+    filteredPayments = allPayments.filter(function(p) {
+        var matchesSearch = !query ||
+            (p.deal_title && p.deal_title.toLowerCase().indexOf(query) !== -1) ||
+            (p.tx_hash && p.tx_hash.toLowerCase().indexOf(query) !== -1);
+        
+        var matchesFilter = currentFilter === 'all' ||
             (currentFilter === 'received' && p.amount > 0) ||
             (currentFilter === 'sent' && p.amount < 0);
+        
         return matchesSearch && matchesFilter;
     });
+    
     renderPayments();
 }
 
 function filterByType(type) {
     currentFilter = type;
-    document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip-primary'));
-    document.getElementById(`chip${type.charAt(0).toUpperCase()+type.slice(1)}`).classList.add('chip-primary');
+    
+    var chips = document.querySelectorAll('.chip[data-filter]');
+    chips.forEach(function(c) { c.classList.remove('chip-primary'); });
+    var active = document.querySelector('.chip[data-filter="' + type + '"]');
+    if (active) active.classList.add('chip-primary');
+    
     filterPayments();
 }
 
+// ============================================
+// Render Payments - NO innerHTML
+// ============================================
 function renderPayments() {
-    const list = document.getElementById('paymentsList');
+    var list = document.getElementById('paymentsList');
+    // Clear safely
+    while (list.firstChild) {
+        list.removeChild(list.firstChild);
+    }
+    
+    hideMessages();
+    
     if (!filteredPayments.length) {
-        document.getElementById('empty').style.display = 'block';
-        list.innerHTML = '';
+        if (allPayments.length > 0) {
+            document.getElementById('noResults').style.display = 'block';
+        } else {
+            document.getElementById('empty').style.display = 'block';
+        }
         return;
     }
-    document.getElementById('empty').style.display = 'none';
     
-    list.innerHTML = filteredPayments.map(p => `
-        <div class="glass-card" style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <div style="font-weight:600;font-size:13px;">${p.deal_title || 'معاملة'}</div>
-                <div class="text-muted">${p.created_at ? new Date(p.created_at).toLocaleDateString('ar-SA') : ''}</div>
-                <span class="badge ${p.status === 'confirmed' ? 'badge-success' : p.status === 'pending' ? 'badge-warning' : 'badge-danger'}">${p.status === 'confirmed' ? 'مكتمل' : p.status === 'pending' ? 'معلق' : 'ملغي'}</span>
-            </div>
-            <div style="font-weight:800;font-size:16px;color:${p.amount > 0 ? 'var(--accent)' : 'var(--danger)'};">
-                ${p.amount > 0 ? '+' : ''}${p.amount} USDT
-            </div>
-        </div>
-    `).join('');
+    filteredPayments.forEach(function(p) {
+        var card = document.createElement('div');
+        card.className = 'payment-card';
+        
+        // Left: Info
+        var info = document.createElement('div');
+        info.className = 'payment-info';
+        
+        var title = document.createElement('div');
+        title.className = 'payment-title';
+        title.textContent = p.deal_title || 'معاملة';
+        
+        var date = document.createElement('div');
+        date.className = 'payment-date';
+        date.textContent = p.created_at ? new Date(p.created_at).toLocaleDateString('ar-SA') : '';
+        
+        info.appendChild(title);
+        info.appendChild(date);
+        
+        // Hash (if exists)
+        if (p.tx_hash) {
+            var hash = document.createElement('div');
+            hash.className = 'payment-hash';
+            hash.textContent = p.tx_hash.substring(0, 12) + '...';
+            hash.title = 'اضغط للنسخ';
+            hash.onclick = function() { copyHash(p.tx_hash); };
+            info.appendChild(hash);
+        }
+        
+        // Badge
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        if (p.status === 'confirmed') {
+            badge.classList.add('badge-success');
+            badge.textContent = 'مكتمل';
+        } else if (p.status === 'pending') {
+            badge.classList.add('badge-warning');
+            badge.textContent = 'معلق';
+        } else {
+            badge.classList.add('badge-danger');
+            badge.textContent = p.status === 'cancelled' ? 'ملغي' : (p.status || 'غير معروف');
+        }
+        info.appendChild(badge);
+        
+        // Right: Amount
+        var amount = document.createElement('div');
+        amount.className = 'payment-amount';
+        if (p.amount > 0) {
+            amount.classList.add('positive');
+            amount.textContent = '+' + formatCurrency(p.amount) + ' USDT';
+        } else if (p.amount < 0) {
+            amount.classList.add('negative');
+            amount.textContent = formatCurrency(p.amount) + ' USDT';
+        } else {
+            amount.textContent = formatCurrency(p.amount) + ' USDT';
+        }
+        
+        card.appendChild(info);
+        card.appendChild(amount);
+        list.appendChild(card);
+    });
 }
 
+// ============================================
+// Load More
+// ============================================
 function loadMore() {
     page++;
     loadPayments();
 }
 
+// ============================================
+// Event Listeners
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('searchInput').addEventListener('input', filterPayments);
+    
+    document.querySelectorAll('.chip[data-filter]').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            filterByType(this.dataset.filter);
+        });
+    });
+    
+    document.getElementById('loadMore').addEventListener('click', loadMore);
+});
+
+// Initial load
 loadPayments();
 </script>
 </body>

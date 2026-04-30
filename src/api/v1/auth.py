@@ -10,14 +10,17 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 import structlog
+from src.services.push_service import PushService
+from src.services.email_service import send_verification_email, send_password_reset_email
+from src.api.middleware import limiter
+import pyotp
 
 from src.app.models.user_repository import UserRepository
 from src.app.models.security import (
     hash_password,
     verify_password,
     generate_token,
-    validate_password_strength,
-    generate_secure_token
+    validate_password_strength
 )
 from src.api.schemas import (
     UserCreateSchema,
@@ -33,8 +36,10 @@ auth_bp = Blueprint('auth_v1', __name__, url_prefix='/api/v1/auth')
 # ============================================================
 
 def get_user_repo():
-    """Get user repository instance."""
-    return UserRepository()
+    """Get user repository instance with DB session."""
+    from src.app.models.database import get_db
+    db = next(get_db())
+    return UserRepository(db)
 
 def _generate_tokens(user_id: str) -> dict:
     """Generate access and refresh tokens for user."""
@@ -59,6 +64,7 @@ def _verify_token(token: str) -> Optional[str]:
 # 📝 Registration & Authentication
 # ============================================================
 
+@limiter.limit('3 per minute')
 @auth_bp.route('/register', methods=['POST'])
 @validate_request(UserCreateSchema())
 def register(validated_data: dict):
@@ -125,17 +131,28 @@ def register(validated_data: dict):
         }), 500
 
 
+@limiter.limit('5 per minute')
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """
     Login with email/username and password.
+    If 2FA is enabled, requires 2fa_code in request.
     تسجيل الدخول بالبريد وكلمة المرور.
+    إذا كانت المصادقة الثنائية مفعلة، يتطلب 2fa_code.
     """
+    # Rate limit: 5 attempts per minute per IP
+    from flask import current_app
+    try:
+        current_app.limiter.hit()
+    except Exception:
+        pass
+    
     try:
         data = request.get_json() or {}
         email = data.get('email', '')
         username = data.get('username', '')
         password = data.get('password', '')
+        two_fa_code = data.get('2fa_code', '')
         
         if not password:
             return jsonify({
@@ -169,10 +186,28 @@ def login():
                 'message_ar': 'الحساب موقوف'
             }), 403
         
-        repo.update(user, {
-            'last_login_at': datetime.now(timezone.utc),
-            'last_login_ip': request.remote_addr
-        })
+        # 2FA verification if enabled
+        if user.is_2fa_enabled:
+            if not two_fa_code:
+                return jsonify({
+                    'error': '2FA code required',
+                    'message_ar': 'رمز المصادقة الثنائية مطلوب',
+                    'requires_2fa': True
+                }), 403
+            
+            if not user.verify_2fa_code(two_fa_code):
+                # Check backup code
+                if not user.verify_backup_code(two_fa_code):
+                    return jsonify({
+                        'error': 'Invalid 2FA code',
+                        'message_ar': 'رمز المصادقة الثنائية غير صالح'
+                    }), 401
+                
+                # Save backup code usage
+                repo.update(user)
+        
+        user.last_login = datetime.now(timezone.utc)
+        repo.update(user)
         
         tokens = _generate_tokens(str(user.id))
         
@@ -260,7 +295,7 @@ def me():
             }), 401
         
         repo = get_user_repo()
-        user = repo.get_by_id(int(user_id))
+        user = repo.get_by_id(user_id)
         
         if not user:
             return jsonify({
@@ -280,10 +315,11 @@ def me():
         }), 500
 
 
+@limiter.limit('5 per minute')
 @auth_bp.route('/verify-email', methods=['POST'])
 def verify_email():
     """
-    Verify email address with code.
+    Verify email address with token.
     التحقق من البريد الإلكتروني برمز التحقق.
     """
     try:
@@ -297,7 +333,18 @@ def verify_email():
                 'message_ar': 'البريد ورمز التحقق مطلوبان'
             }), 400
         
-        if len(code) == 6 and code.isdigit():
+        repo = get_user_repo()
+        user = repo.get_by_email(email)
+        
+        if not user:
+            return jsonify({
+                'error': 'Invalid verification code',
+                'message_ar': 'رمز التحقق غير صالح'
+            }), 400
+        
+        if user.verify_email(code):
+            repo.update(user)
+            
             logger.info("email.verified", email=email)
             return jsonify({
                 'message': 'Email verified successfully',
@@ -305,8 +352,8 @@ def verify_email():
             }), 200
         else:
             return jsonify({
-                'error': 'Invalid verification code',
-                'message_ar': 'رمز التحقق غير صالح'
+                'error': 'Invalid or expired verification code',
+                'message_ar': 'رمز التحقق غير صالح أو منتهي الصلاحية'
             }), 400
             
     except Exception as e:
@@ -333,6 +380,21 @@ def resend_verification():
                 'message_ar': 'البريد مطلوب'
             }), 400
         
+        repo = get_user_repo()
+        user = repo.get_by_email(email)
+        
+        if not user:
+            # Don't reveal if email exists
+            return jsonify({
+                'message': 'If the email exists, a verification code has been sent',
+                'message_ar': 'إذا كان البريد موجوداً، تم إرسال رمز التحقق'
+            }), 200
+        
+        token = user.generate_verification_token()
+        repo.update(user)
+        
+        # Send real email
+        send_verification_email(user.email, f"https://safesend.io/verify-email?token={user.email_verification_token}", user.username)
         logger.info("verification.resent", email=email)
         
         return jsonify({
@@ -348,6 +410,7 @@ def resend_verification():
         }), 500
 
 
+@limiter.limit('3 per minute')
 @auth_bp.route('/forgot-password', methods=['POST'])
 def forgot_password():
     """
@@ -364,6 +427,15 @@ def forgot_password():
                 'message_ar': 'البريد مطلوب'
             }), 400
         
+        repo = get_user_repo()
+        user = repo.get_by_email(email)
+        
+        if user:
+            token = user.generate_password_reset_token()
+            repo.update(user)
+        
+        # Send real email
+        send_password_reset_email(user.email, f"https://safesend.io/reset-password?token={user.password_reset_token}", user.username)
         logger.info("password.reset_requested", email=email)
         
         return jsonify({
@@ -389,6 +461,7 @@ def reset_password():
         data = request.get_json() or {}
         token = data.get('token', '')
         new_password = data.get('password', '')
+        email = data.get('email', '')
         
         if not token or not new_password:
             return jsonify({
@@ -402,6 +475,17 @@ def reset_password():
                 'error': msg,
                 'message_ar': 'كلمة المرور ضعيفة'
             }), 400
+        
+        repo = get_user_repo()
+        user = repo.get_by_email(email) if email else None
+        
+        if not user or not user.verify_password_reset_token(token):
+            return jsonify({
+                'error': 'Invalid or expired reset token',
+                'message_ar': 'رمز إعادة التعيين غير صالح أو منتهي الصلاحية'
+            }), 400
+        
+        repo.update(user)
         
         logger.info("password.reset")
         
@@ -446,7 +530,7 @@ def change_password():
             }), 400
         
         repo = get_user_repo()
-        user = repo.get_by_id(int(user_id))
+        user = repo.get_by_id(user_id)
         
         if not user or not verify_password(old_password, user.password_hash):
             return jsonify({
@@ -461,7 +545,7 @@ def change_password():
                 'message_ar': 'كلمة المرور ضعيفة'
             }), 400
         
-        repo.update(user, {'password_hash': hash_password(new_password)})
+        repo.update(user)
         
         logger.info("password.changed", user_id=user_id)
         
@@ -482,7 +566,9 @@ def change_password():
 def enable_2fa():
     """
     Enable two-factor authentication.
+    Returns TOTP secret and QR code for authenticator app setup.
     تفعيل المصادقة الثنائية.
+    يعيد مفتاح TOTP ورمز QR للإعداد في تطبيق المصادقة.
     """
     try:
         auth_header = request.headers.get('Authorization', '')
@@ -495,16 +581,46 @@ def enable_2fa():
                 'message_ar': 'المصادقة مطلوبة'
             }), 401
         
-        secret = generate_secure_token(16)
-        backup_codes = [generate_secure_token(6) for _ in range(8)]
+        repo = get_user_repo()
+        user = repo.get_by_id(user_id)
+        
+        if not user:
+            return jsonify({
+                'error': 'User not found',
+                'message_ar': 'المستخدم غير موجود'
+            }), 404
+        
+        if user.is_2fa_enabled:
+            return jsonify({
+                'error': '2FA is already enabled',
+                'message_ar': 'المصادقة الثنائية مفعلة مسبقاً'
+            }), 409
+        
+        # Generate real TOTP secret
+        secret = pyotp.random_base32()
+        
+        # Setup 2FA on user model (encrypts secret, returns provisioning URI)
+        provisioning_uri = user.setup_2fa(secret)
+        
+        # Generate backup codes
+        backup_codes_raw = [pyotp.random_base32()[:8] for _ in range(8)]
+        user.set_backup_codes(backup_codes_raw)
+        
+        # Save to database
+        repo.update(user)
+        
+        # Generate QR code
+        qr_code_b64 = user.generate_2fa_qr_code()
         
         logger.info("2fa.setup_initiated", user_id=user_id)
         
         return jsonify({
             'message': '2FA setup initiated',
             'message_ar': 'تم بدء إعداد المصادقة الثنائية',
-            'secret': secret,
-            'backup_codes': backup_codes
+          
+            'provisioning_uri': provisioning_uri,
+            'qr_code': qr_code_b64,
+            'backup_codes': backup_codes_raw
         }), 200
         
     except Exception as e:
@@ -518,8 +634,8 @@ def enable_2fa():
 @auth_bp.route('/2fa/verify', methods=['POST'])
 def verify_2fa():
     """
-    Verify 2FA code.
-    التحقق من رمز المصادقة الثنائية.
+    Verify 2FA code to complete activation.
+    التحقق من رمز المصادقة الثنائية لإكمال التفعيل.
     """
     try:
         auth_header = request.headers.get('Authorization', '')
@@ -541,11 +657,29 @@ def verify_2fa():
                 'message_ar': 'رمز التحقق غير صالح'
             }), 400
         
+        repo = get_user_repo()
+        user = repo.get_by_id(user_id)
+        
+        if not user:
+            return jsonify({
+                'error': 'User not found',
+                'message_ar': 'المستخدم غير موجود'
+            }), 404
+        
+        # Real TOTP verification
+        if not user.verify_2fa_code(code):
+            return jsonify({
+                'error': 'Invalid verification code',
+                'message_ar': 'رمز التحقق غير صالح'
+            }), 400
+        
+        # 2FA is already enabled from /enable, just confirm verification
         logger.info("2fa.verified", user_id=user_id)
         
         return jsonify({
             'message': '2FA activated successfully',
-            'message_ar': 'تم تفعيل المصادقة الثنائية بنجاح'
+            'message_ar': 'تم تفعيل المصادقة الثنائية بنجاح',
+            'backup_codes_remaining': user.remaining_backup_codes
         }), 200
         
     except Exception as e:
@@ -560,7 +694,9 @@ def verify_2fa():
 def disable_2fa():
     """
     Disable two-factor authentication.
+    Requires current 2FA code or backup code for verification.
     تعطيل المصادقة الثنائية.
+    يتطلب رمز 2FA حالي أو رمز احتياطي للتحقق.
     """
     try:
         auth_header = request.headers.get('Authorization', '')
@@ -572,6 +708,36 @@ def disable_2fa():
                 'error': 'Authentication required',
                 'message_ar': 'المصادقة مطلوبة'
             }), 401
+        
+        data = request.get_json() or {}
+        code = data.get('code', '')
+        
+        repo = get_user_repo()
+        user = repo.get_by_id(user_id)
+        
+        if not user:
+            return jsonify({
+                'error': 'User not found',
+                'message_ar': 'المستخدم غير موجود'
+            }), 404
+        
+        if not user.is_2fa_enabled:
+            return jsonify({
+                'error': '2FA is not enabled',
+                'message_ar': 'المصادقة الثنائية غير مفعلة'
+            }), 400
+        
+        # Verify code before disabling
+        if not user.verify_2fa_code(code):
+            if not user.verify_backup_code(code):
+                return jsonify({
+                    'error': 'Invalid verification code',
+                    'message_ar': 'رمز التحقق غير صالح'
+                }), 400
+        
+        # Disable 2FA
+        user.disable_2fa()
+        repo.update(user)
         
         logger.info("2fa.disabled", user_id=user_id)
         
@@ -592,7 +758,9 @@ def disable_2fa():
 def regenerate_backup_codes():
     """
     Regenerate 2FA backup codes.
+    Requires current 2FA code for verification.
     إعادة توليد رموز احتياطية.
+    يتطلب رمز 2FA حالي للتحقق.
     """
     try:
         auth_header = request.headers.get('Authorization', '')
@@ -605,14 +773,43 @@ def regenerate_backup_codes():
                 'message_ar': 'المصادقة مطلوبة'
             }), 401
         
-        backup_codes = [generate_secure_token(6) for _ in range(8)]
+        data = request.get_json() or {}
+        code = data.get('code', '')
+        
+        repo = get_user_repo()
+        user = repo.get_by_id(user_id)
+        
+        if not user:
+            return jsonify({
+                'error': 'User not found',
+                'message_ar': 'المستخدم غير موجود'
+            }), 404
+        
+        if not user.is_2fa_enabled:
+            return jsonify({
+                'error': '2FA is not enabled',
+                'message_ar': 'المصادقة الثنائية غير مفعلة'
+            }), 400
+        
+        # Verify current 2FA code before regenerating
+        if not user.verify_2fa_code(code):
+            return jsonify({
+                'error': 'Invalid 2FA code',
+                'message_ar': 'رمز المصادقة غير صالح'
+            }), 400
+        
+        # Generate new backup codes
+        backup_codes_raw = [pyotp.random_base32()[:8] for _ in range(8)]
+        user.set_backup_codes(backup_codes_raw)
+        
+        repo.update(user)
         
         logger.info("2fa.backup_regenerated", user_id=user_id)
         
         return jsonify({
             'message': 'Backup codes regenerated',
             'message_ar': 'تم إعادة توليد الرموز الاحتياطية',
-            'backup_codes': backup_codes
+            'backup_codes': backup_codes_raw
         }), 200
         
     except Exception as e:
@@ -640,12 +837,27 @@ def push_subscribe():
                 'message_ar': 'المصادقة مطلوبة'
             }), 401
         
+        data = request.get_json(silent=True) or {}
+        subscription = data.get('subscription', {})
+        
+        # Save subscription to user preferences
+        if subscription:
+            repo = get_user_repo()
+            user = repo.get_by_id(user_id)
+            if user:
+                push_subs = user.get_preference('push_subscriptions', [])
+                # Avoid duplicate
+                if subscription not in push_subs:
+                    push_subs.append(subscription)
+                user.set_preference('push_subscriptions', push_subs)
+                repo.update(user)
+        
         logger.info("push.subscribed", user_id=user_id)
         
         return jsonify({
             'message': 'Subscribed to push notifications',
             'message_ar': 'تم الاشتراك في الإشعارات'
-               }), 200
+        }), 200
         
     except Exception as e:
         logger.error("push.subscribe_failed", error=str(e))

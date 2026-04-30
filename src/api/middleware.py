@@ -1,5 +1,5 @@
 """
-Middleware层 - SafeSend API
+Middleware Layer - SafeSend API
 طبقة الوسيط لـ SafeSend API
 
 Applies security, logging, tracing, and rate limiting to all requests.
@@ -9,23 +9,36 @@ Applies security, logging, tracing, and rate limiting to all requests.
 import time
 import uuid
 from flask import Flask, g, request, jsonify, current_app
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from typing import Optional, Any
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# Global limiter instance
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["5 per minute"],
+    storage_uri="memory://",
+    strategy="fixed-window"
+)
 
 def setup_middleware(app: Flask) -> None:
     """
     Register all middleware functions with the Flask application.
     تسجيل جميع دوال الوسيط مع تطبيق Flask.
     """
+    # Initialize rate limiter
+    limiter.init_app(app)
+    
+    # Register handlers
     app.before_request(before_request_handler)
     app.after_request(after_request_handler)
     app.teardown_request(teardown_request_handler)
-    
     app.register_error_handler(429, rate_limit_exceeded_handler)
     
-    logger.info("middleware.configured")
+    logger.info("middleware.configured", rate_limiter="Flask-Limiter")
 
 def before_request_handler() -> None:
     """
@@ -44,7 +57,7 @@ def before_request_handler() -> None:
     logger.debug(
         "request.started",
         remote_addr=request.remote_addr,
-        user_agent=request.headers.get('User-Agent')
+        user_agent=request.headers.get('User-Agent', '')[:200]
     )
 
 def after_request_handler(response) -> Any:
@@ -52,6 +65,7 @@ def after_request_handler(response) -> Any:
     Actions after each request processing.
     إجراءات ما بعد معالجة كل طلب.
     """
+    # Security headers
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
@@ -60,10 +74,10 @@ def after_request_handler(response) -> Any:
     response.headers['Content-Security-Policy'] = "default-src 'self'"
     response.headers['X-Request-ID'] = g.get('request_id', '')
     
+    # Response time
     if hasattr(g, 'start_time'):
         duration = time.time() - g.start_time
         response.headers['X-Response-Time'] = f"{duration:.4f}s"
-        
         logger.debug(
             "request.completed",
             status_code=response.status_code,
@@ -87,32 +101,13 @@ def rate_limit_exceeded_handler(e) -> tuple:
     Handler for rate limit exceeding (429 Too Many Requests).
     معالج تجاوز معدل الطلبات (429 طلبات كثيرة جداً).
     """
-    logger.warning("rate_limit.exceeded", ip=request.remote_addr)
+    logger.warning("rate_limit.exceeded", ip=request.remote_addr, path=request.path)
     return jsonify({
         'error': 'Rate limit exceeded',
         'message': 'Too many requests. Please try again later.',
-        'message_ar': 'تجاوزت الحد المسموح من الطلبات. حاول مرة أخرى لاحقاً.'
+        'message_ar': 'تجاوزت الحد المسموح من الطلبات. حاول مرة أخرى لاحقاً.',
+        'retry_after': getattr(e, 'retry_after', 60)
     }), 429
-
-def rate_limit_by_user_middleware() -> Optional[tuple]:
-    """
-    Check rate limits based on user role.
-    فحص حدود المعدل بناءً على دور المستخدم.
-    
-    يتم الاعتماد على Flask-Limiter في التنفيذ الفعلي عبر الـ decorators.
-    هذه الدالة توفر نقطة تخصيص لمنطق إضافي مستقبلي.
-    """
-    limits = {
-        'admin': 300,
-        'user': 60,
-        'anonymous': 10
-    }
-    
-    user_role = getattr(g, 'user_role', 'anonymous')
-    current_limit = limits.get(user_role, 10)
-    
-    logger.debug("rate_limit.check", role=user_role, limit=current_limit)
-    return None
 
 def cors_middleware() -> Optional[tuple]:
     """
@@ -130,10 +125,10 @@ def cors_middleware() -> Optional[tuple]:
 
 __all__ = [
     'setup_middleware',
+    'limiter',
     'before_request_handler',
     'after_request_handler',
     'teardown_request_handler',
     'rate_limit_exceeded_handler',
-    'rate_limit_by_user_middleware',
     'cors_middleware'
 ]

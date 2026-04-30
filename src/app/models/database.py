@@ -7,7 +7,7 @@ import os
 from typing import Generator, Optional
 from urllib.parse import urlparse
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, text, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.app.models.base import Base
@@ -23,6 +23,10 @@ def create_db_engine(database_url: Optional[str] = None) -> Engine:
     
     engine_options = {
         "pool_pre_ping": True,
+        "pool_size": 5,
+        "max_overflow": 0,
+        "pool_size": 5,
+        "max_overflow": 0,
         "echo": False,
     }
     
@@ -38,6 +42,15 @@ def create_db_engine(database_url: Optional[str] = None) -> Engine:
 
 
 engine = create_db_engine()
+
+# Enable WAL mode for SQLite (supports concurrent reads/writes)
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if 'sqlite' in str(type(dbapi_connection)):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 
 

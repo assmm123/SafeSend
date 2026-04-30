@@ -1,8 +1,8 @@
-"""initial_core_tables
+"""initial
 
-Revision ID: 6e325cdfe8f5
+Revision ID: 4671e52a966d
 Revises: 
-Create Date: 2026-04-16 02:29:21.825550
+Create Date: 2026-04-29 20:40:43.939219
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '6e325cdfe8f5'
+revision: str = '4671e52a966d'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -44,6 +44,11 @@ def upgrade() -> None:
     sa.Column('locked_until', sa.DateTime(timezone=True), nullable=True),
     sa.Column('password_reset_token', sa.String(length=64), nullable=True),
     sa.Column('password_reset_sent_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_2fa_enabled', sa.Boolean(), nullable=False),
+    sa.Column('encrypted_2fa_secret', sa.String(length=255), nullable=True),
+    sa.Column('backup_codes', sa.JSON(), nullable=True),
+    sa.Column('used_backup_codes_count', sa.Integer(), nullable=False),
+    sa.Column('two_fa_enabled_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('last_login', sa.DateTime(timezone=True), nullable=True),
     sa.Column('last_activity_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('login_count', sa.Integer(), nullable=False),
@@ -101,39 +106,43 @@ def upgrade() -> None:
     op.create_index('ix_conversations_seller_id', 'conversations', ['seller_id'], unique=False)
     op.create_index('ix_conversations_status', 'conversations', ['status'], unique=False)
     op.create_table('deals',
+    sa.Column('seller_id', sa.UUID(), nullable=False),
+    sa.Column('buyer_id', sa.UUID(), nullable=True),
     sa.Column('title', sa.String(length=200), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('terms', sa.Text(), nullable=True),
-    sa.Column('seller_id', sa.String(length=36), nullable=False),
-    sa.Column('buyer_id', sa.String(length=36), nullable=True),
     sa.Column('amount', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('currency', sa.String(length=10), nullable=False),
     sa.Column('platform_fee', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('seller_amount', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('escrow_address', sa.String(length=42), nullable=True),
     sa.Column('escrow_tx_id', sa.String(length=100), nullable=True),
     sa.Column('release_tx_id', sa.String(length=100), nullable=True),
     sa.Column('refund_tx_id', sa.String(length=100), nullable=True),
+    sa.Column('payment_memo', sa.String(length=100), nullable=True),
     sa.Column('deadline', sa.DateTime(timezone=True), nullable=True),
     sa.Column('funded_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('delivered_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('cancelled_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('cancel_reason', sa.String(length=200), nullable=True),
     sa.Column('dispute_reason', sa.String(length=500), nullable=True),
     sa.Column('dispute_resolved_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('resolution_note', sa.Text(), nullable=True),
+    sa.Column('cancel_reason', sa.String(length=200), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('extra_data', sa.JSON(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['buyer_id'], ['users.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['buyer_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['seller_id'], ['users.id'], ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_deals_buyer_id', 'deals', ['buyer_id'], unique=False)
     op.create_index('ix_deals_created_at', 'deals', ['created_at'], unique=False)
     op.create_index('ix_deals_deadline', 'deals', ['deadline'], unique=False)
+    op.create_index('ix_deals_deleted_at', 'deals', ['deleted_at'], unique=False)
     op.create_index('ix_deals_seller_id', 'deals', ['seller_id'], unique=False)
     op.create_index('ix_deals_status', 'deals', ['status'], unique=False)
     op.create_table('sessions',
@@ -165,6 +174,90 @@ def upgrade() -> None:
     op.create_index('ix_sessions_revoked_at', 'sessions', ['revoked_at'], unique=False)
     op.create_index('ix_sessions_status', 'sessions', ['status'], unique=False)
     op.create_index('ix_sessions_user_id', 'sessions', ['user_id'], unique=False)
+    op.create_table('disputes',
+    sa.Column('deal_id', sa.UUID(), nullable=False),
+    sa.Column('opened_by_id', sa.UUID(), nullable=False),
+    sa.Column('resolved_by_id', sa.UUID(), nullable=True),
+    sa.Column('dispute_uuid', sa.String(length=36), nullable=False),
+    sa.Column('reason', sa.Text(), nullable=False),
+    sa.Column('reason_category', sa.String(length=50), nullable=False),
+    sa.Column('evidence', sa.JSON(), nullable=True),
+    sa.Column('status', sa.String(length=30), nullable=False),
+    sa.Column('resolution', sa.Text(), nullable=True),
+    sa.Column('resolution_type', sa.String(length=30), nullable=True),
+    sa.Column('resolution_notes', sa.Text(), nullable=True),
+    sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('appealed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('appeal_reason', sa.Text(), nullable=True),
+    sa.Column('deadline', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('extra_data', sa.JSON(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['deal_id'], ['deals.id'], ),
+    sa.ForeignKeyConstraint(['opened_by_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['resolved_by_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('dispute_uuid')
+    )
+    op.create_index('ix_disputes_created_at', 'disputes', ['created_at'], unique=False)
+    op.create_index('ix_disputes_deadline', 'disputes', ['deadline'], unique=False)
+    op.create_index('ix_disputes_deal_id', 'disputes', ['deal_id'], unique=False)
+    op.create_index('ix_disputes_dispute_uuid', 'disputes', ['dispute_uuid'], unique=False)
+    op.create_index('ix_disputes_opened_by_id', 'disputes', ['opened_by_id'], unique=False)
+    op.create_index('ix_disputes_reason_category', 'disputes', ['reason_category'], unique=False)
+    op.create_index('ix_disputes_status', 'disputes', ['status'], unique=False)
+    op.create_table('files',
+    sa.Column('deal_id', sa.String(length=36), nullable=True),
+    sa.Column('uploader_id', sa.String(length=36), nullable=False),
+    sa.Column('last_download_by', sa.String(length=36), nullable=True),
+    sa.Column('deleted_by', sa.String(length=36), nullable=True),
+    sa.Column('original_name', sa.String(length=255), nullable=False),
+    sa.Column('stored_name', sa.String(length=255), nullable=False),
+    sa.Column('file_path', sa.String(length=512), nullable=False),
+    sa.Column('encrypted_path', sa.String(length=512), nullable=True),
+    sa.Column('watermarked_path', sa.String(length=512), nullable=True),
+    sa.Column('thumbnail_path', sa.String(length=512), nullable=True),
+    sa.Column('file_size', sa.BigInteger(), nullable=False),
+    sa.Column('mime_type', sa.String(length=100), nullable=False),
+    sa.Column('extension', sa.String(length=10), nullable=False),
+    sa.Column('checksum', sa.String(length=64), nullable=False),
+    sa.Column('encrypted_checksum', sa.String(length=64), nullable=True),
+    sa.Column('encrypted', sa.Boolean(), nullable=False),
+    sa.Column('virus_scanned', sa.Boolean(), nullable=False),
+    sa.Column('virus_scan_result', sa.String(length=50), nullable=False),
+    sa.Column('virus_scan_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('virus_signature', sa.String(length=100), nullable=True),
+    sa.Column('watermarked', sa.Boolean(), nullable=False),
+    sa.Column('watermark_text', sa.String(length=255), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('download_count', sa.Integer(), nullable=False),
+    sa.Column('last_download_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('view_count', sa.Integer(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('delete_reason', sa.String(length=200), nullable=True),
+    sa.Column('extra_data', sa.JSON(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['deal_id'], ['deals.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['deleted_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['last_download_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['uploader_id'], ['users.id'], ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_files_checksum', 'files', ['checksum'], unique=False)
+    op.create_index('ix_files_created_at', 'files', ['created_at'], unique=False)
+    op.create_index('ix_files_deal_id', 'files', ['deal_id'], unique=False)
+    op.create_index('ix_files_deleted_at', 'files', ['deleted_at'], unique=False)
+    op.create_index('ix_files_encrypted', 'files', ['encrypted'], unique=False)
+    op.create_index('ix_files_expires_at', 'files', ['expires_at'], unique=False)
+    op.create_index('ix_files_status', 'files', ['status'], unique=False)
+    op.create_index('ix_files_uploader_id', 'files', ['uploader_id'], unique=False)
+    op.create_index('ix_files_virus_scan_result', 'files', ['virus_scan_result'], unique=False)
+    op.create_index('ix_files_virus_scanned', 'files', ['virus_scanned'], unique=False)
+    op.create_index('ix_files_watermarked', 'files', ['watermarked'], unique=False)
     op.create_table('messages',
     sa.Column('conversation_id', sa.String(length=36), nullable=False),
     sa.Column('sender_id', sa.String(length=36), nullable=False),
@@ -194,18 +287,92 @@ def upgrade() -> None:
     op.create_index('ix_messages_deleted_at', 'messages', ['deleted_at'], unique=False)
     op.create_index('ix_messages_is_read', 'messages', ['is_read'], unique=False)
     op.create_index('ix_messages_sender_id', 'messages', ['sender_id'], unique=False)
+    op.create_table('transactions',
+    sa.Column('deal_id', sa.String(length=36), nullable=True),
+    sa.Column('user_id', sa.String(length=36), nullable=True),
+    sa.Column('transaction_uuid', sa.String(length=64), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=64), nullable=True),
+    sa.Column('tx_type', sa.String(length=30), nullable=False),
+    sa.Column('network', sa.String(length=20), nullable=False),
+    sa.Column('tx_hash', sa.String(length=64), nullable=True),
+    sa.Column('from_address', sa.String(length=42), nullable=True),
+    sa.Column('to_address', sa.String(length=42), nullable=True),
+    sa.Column('amount_usdt', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('amount_trx', sa.Numeric(precision=10, scale=6), nullable=False),
+    sa.Column('fee_trx', sa.Numeric(precision=10, scale=6), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('confirmed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('block_number', sa.BigInteger(), nullable=True),
+    sa.Column('block_confirmations', sa.Integer(), nullable=False),
+    sa.Column('retry_count', sa.Integer(), nullable=False),
+    sa.Column('last_retry_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('max_retries', sa.Integer(), nullable=False),
+    sa.Column('memo', sa.String(length=255), nullable=True),
+    sa.Column('error_message', sa.Text(), nullable=True),
+    sa.Column('extra_data', sa.JSON(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['deal_id'], ['deals.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('idempotency_key'),
+    sa.UniqueConstraint('transaction_uuid'),
+    sa.UniqueConstraint('tx_hash')
+    )
+    op.create_index('ix_transactions_confirmed_at', 'transactions', ['confirmed_at'], unique=False)
+    op.create_index('ix_transactions_created_at', 'transactions', ['created_at'], unique=False)
+    op.create_index('ix_transactions_deal_id', 'transactions', ['deal_id'], unique=False)
+    op.create_index('ix_transactions_idempotency_key', 'transactions', ['idempotency_key'], unique=False)
+    op.create_index('ix_transactions_network', 'transactions', ['network'], unique=False)
+    op.create_index('ix_transactions_status', 'transactions', ['status'], unique=False)
+    op.create_index('ix_transactions_transaction_uuid', 'transactions', ['transaction_uuid'], unique=False)
+    op.create_index('ix_transactions_tx_hash', 'transactions', ['tx_hash'], unique=False)
+    op.create_index('ix_transactions_tx_type', 'transactions', ['tx_type'], unique=False)
+    op.create_index('ix_transactions_user_id', 'transactions', ['user_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index('ix_transactions_user_id', table_name='transactions')
+    op.drop_index('ix_transactions_tx_type', table_name='transactions')
+    op.drop_index('ix_transactions_tx_hash', table_name='transactions')
+    op.drop_index('ix_transactions_transaction_uuid', table_name='transactions')
+    op.drop_index('ix_transactions_status', table_name='transactions')
+    op.drop_index('ix_transactions_network', table_name='transactions')
+    op.drop_index('ix_transactions_idempotency_key', table_name='transactions')
+    op.drop_index('ix_transactions_deal_id', table_name='transactions')
+    op.drop_index('ix_transactions_created_at', table_name='transactions')
+    op.drop_index('ix_transactions_confirmed_at', table_name='transactions')
+    op.drop_table('transactions')
     op.drop_index('ix_messages_sender_id', table_name='messages')
     op.drop_index('ix_messages_is_read', table_name='messages')
     op.drop_index('ix_messages_deleted_at', table_name='messages')
     op.drop_index('ix_messages_created_at', table_name='messages')
     op.drop_index('ix_messages_conversation_id', table_name='messages')
     op.drop_table('messages')
+    op.drop_index('ix_files_watermarked', table_name='files')
+    op.drop_index('ix_files_virus_scanned', table_name='files')
+    op.drop_index('ix_files_virus_scan_result', table_name='files')
+    op.drop_index('ix_files_uploader_id', table_name='files')
+    op.drop_index('ix_files_status', table_name='files')
+    op.drop_index('ix_files_expires_at', table_name='files')
+    op.drop_index('ix_files_encrypted', table_name='files')
+    op.drop_index('ix_files_deleted_at', table_name='files')
+    op.drop_index('ix_files_deal_id', table_name='files')
+    op.drop_index('ix_files_created_at', table_name='files')
+    op.drop_index('ix_files_checksum', table_name='files')
+    op.drop_table('files')
+    op.drop_index('ix_disputes_status', table_name='disputes')
+    op.drop_index('ix_disputes_reason_category', table_name='disputes')
+    op.drop_index('ix_disputes_opened_by_id', table_name='disputes')
+    op.drop_index('ix_disputes_dispute_uuid', table_name='disputes')
+    op.drop_index('ix_disputes_deal_id', table_name='disputes')
+    op.drop_index('ix_disputes_deadline', table_name='disputes')
+    op.drop_index('ix_disputes_created_at', table_name='disputes')
+    op.drop_table('disputes')
     op.drop_index('ix_sessions_user_id', table_name='sessions')
     op.drop_index('ix_sessions_status', table_name='sessions')
     op.drop_index('ix_sessions_revoked_at', table_name='sessions')
@@ -216,6 +383,7 @@ def downgrade() -> None:
     op.drop_table('sessions')
     op.drop_index('ix_deals_status', table_name='deals')
     op.drop_index('ix_deals_seller_id', table_name='deals')
+    op.drop_index('ix_deals_deleted_at', table_name='deals')
     op.drop_index('ix_deals_deadline', table_name='deals')
     op.drop_index('ix_deals_created_at', table_name='deals')
     op.drop_index('ix_deals_buyer_id', table_name='deals')

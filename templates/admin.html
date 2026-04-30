@@ -1,50 +1,563 @@
-<!DOCTYPE html><html lang="ar" dir="rtl" data-theme="dark">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SafeSend - Admin</title>
-<link rel="stylesheet" href="/static/css/safesend.css">
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" id="csrf-token">
+    <title>SafeSend - لوحة الإدارة</title>
+    <link rel="stylesheet" href="/static/css/safesend.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .stat-widget {
+            background: var(--glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .stat-widget:hover { transform: translateY(-2px); }
+        .stat-value { font-size: 28px; font-weight: 800; color: var(--primary); }
+        .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        
+        .tab-nav { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+        .tab-btn { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.2s; }
+        .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        .user-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--glass); border: 1px solid var(--border-glass); border-radius: 16px; margin-bottom: 8px; }
+        .user-row .user-info { flex: 1; min-width: 0; }
+        .user-row .user-name { font-weight: 600; }
+        .user-row .user-email { font-size: 12px; color: var(--text-muted); }
+        .user-row .user-actions { display: flex; gap: 6px; }
+        
+        .action-btn { padding: 6px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 11px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+        .action-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+        .action-btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+        .action-btn.warning:hover { background: var(--warning); border-color: var(--warning); color: #000; }
+        
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .badge-success { background: rgba(34,228,172,0.15); color: var(--accent); }
+        .badge-warning { background: rgba(255,165,0,0.15); color: orange; }
+        .badge-danger { background: rgba(255,75,106,0.15); color: var(--danger); }
+        .badge-info { background: rgba(26,115,232,0.15); color: var(--primary); }
+        
+        .revenue-card { padding: 16px 20px; background: var(--glass); border: 1px solid var(--border-glass); border-radius: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .revenue-value { font-size: 24px; font-weight: 800; color: var(--accent); }
+        .revenue-label { font-size: 13px; color: var(--text-muted); }
+        
+        .error-msg { background: rgba(255,75,106,0.1); border: 1px solid rgba(255,75,106,0.3); border-radius: 12px; padding: 12px; color: var(--danger); text-align: center; }
+        
+        .refresh-indicator { font-size: 11px; color: var(--text-muted); text-align: left; margin-top: 4px; }
+        
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr 1fr; }
+            .stat-value { font-size: 22px; }
+        }
+    </style>
 </head>
 <body style="background:var(--bg);color:var(--text);font-family:Tajawal;padding:20px;">
+
 <div class="container">
 
-<div style="background:var(--glass);border:1px solid var(--border-glass);border-radius:26px;padding:20px;margin-bottom:20px;">
-<h1 style="color:var(--primary);">👑 لوحة المالك</h1></div>
+    <!-- Header -->
+    <div style="background:var(--glass);border:1px solid var(--border-glass);border-radius:26px;padding:20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;">
+        <h1 style="color:var(--primary);margin:0;">👑 لوحة الإدارة</h1>
+        <span class="refresh-indicator" id="lastUpdate"></span>
+    </div>
 
-<div class="grid-2 mb-4" id="adminStats"></div>
+    <!-- Stats -->
+    <div class="grid-2 mb-4" id="adminStats"></div>
 
-<div style="margin:16px 0;font-weight:600;">💰 إيرادات</div>
-<div class="glass-card" id="revenue"></div>
+    <!-- Revenue -->
+    <div style="margin:16px 0;font-weight:600;">💰 الإيرادات</div>
+    <div id="revenue"></div>
 
-<div style="margin:16px 0;font-weight:600;">👥 آخر المستخدمين</div>
-<div id="usersList"></div>
+    <!-- Tabs -->
+    <div class="tab-nav" id="tabNav">
+        <button class="tab-btn active" data-tab="users">👥 المستخدمين</button>
+        <button class="tab-btn" data-tab="deals">📋 الصفقات</button>
+        <button class="tab-btn" data-tab="disputes">⚖️ النزاعات</button>
+        <button class="tab-btn" data-tab="payouts">💸 المدفوعات</button>
+    </div>
 
-<p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
+    <!-- Tab Content -->
+    <div id="tabContent"></div>
 
-<div class="bottom-nav">
-<a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
-<a href="/admin" class="nav-item active"><span class="nav-icon">👑</span>المالك</a>
+    <!-- Loading -->
+    <p id="loading" class="text-center text-muted" style="padding:20px;">⏳ جاري التحميل...</p>
+
+    <!-- Error -->
+    <div id="errorMsg" class="error-msg" style="display:none;"></div>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <a href="/dashboard" class="nav-item"><span class="nav-icon">🏠</span>الرئيسية</a>
+        <a href="/admin" class="nav-item active"><span class="nav-icon">👑</span>الإدارة</a>
+    </div>
 </div>
-</div>
+
 <script>
-const token=localStorage.getItem('safesend_token');
-if(!token){window.location.href='/login';}
-async function load(){
-try{
-const s=await fetch('/api/v1/admin/stats',{headers:{'Authorization':'Bearer '+token}});
-const st=(await s.json()).stats;
-document.getElementById('adminStats').innerHTML=`
-<div class="stat-widget"><div class="stat-value">${st.total_users}</div><div class="stat-label">مستخدمين</div></div>
-<div class="stat-widget"><div class="stat-value">${st.active_deals}</div><div class="stat-label">صفقات</div></div>
-<div class="stat-widget"><div class="stat-value">$${st.total_volume}</div><div class="stat-label">حجم</div></div>
-<div class="stat-widget"><div class="stat-value">${st.disputes_opened}</div><div class="stat-label">نزاعات</div></div>`;
-const r=await fetch('/api/v1/admin/stats/revenue',{headers:{'Authorization':'Bearer '+token}});
-const rev=(await r.json()).revenue;
-document.getElementById('revenue').textContent='هذا الشهر: $'+rev.this_month;
-const u=await fetch('/api/v1/admin/users',{headers:{'Authorization':'Bearer '+token}});
-const users=(await u.json()).users;
-document.getElementById('usersList').innerHTML=users.map(u=>`<div class="glass-card"><span style="font-weight:600;">${u.username}</span> - ${u.email} <span class="badge badge-success">${u.status}</span></div>`).join('');
-}catch(e){}
-document.getElementById('loading').style.display='none';
+// ============================================
+// Theme
+// ============================================
+(function() {
+    var theme = localStorage.getItem('safesend_theme');
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+})();
+
+// ============================================
+// Helpers
+// ============================================
+var token = localStorage.getItem('safesend_token');
+if (!token) { window.location.href = '/login'; }
+
+function getCSRFToken() {
+    var el = document.getElementById('csrf-token');
+    return el ? el.getAttribute('content') : '';
 }
+
+function getHeaders() {
+    var h = { 'Authorization': 'Bearer ' + token };
+    var csrf = getCSRFToken();
+    if (csrf) h['X-CSRF-Token'] = csrf;
+    return h;
+}
+
+function formatNumber(n) {
+    if (typeof n !== 'number') return n;
+    return n.toLocaleString('ar-SA');
+}
+
+function formatCurrency(n) {
+    if (typeof n !== 'number') return '$' + n;
+    return '$' + n.toLocaleString('ar-SA');
+}
+
+function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+}
+
+function hideError() {
+    document.getElementById('errorMsg').style.display = 'none';
+}
+
+// ============================================
+// Load All Data (Promise.all)
+// ============================================
+var currentTab = 'users';
+var allData = {};
+
+async function load() {
+    hideError();
+    document.getElementById('loading').style.display = 'block';
+    
+    try {
+        var headers = getHeaders();
+        var baseUrl = '/api/v1/admin';
+        
+        var results = await Promise.all([
+            fetch(baseUrl + '/stats', { headers: headers }),
+            fetch(baseUrl + '/stats/revenue', { headers: headers }),
+            fetch(baseUrl + '/users', { headers: headers }),
+            fetch(baseUrl + '/deals', { headers: headers }),
+            fetch(baseUrl + '/disputes', { headers: headers }),
+            fetch(baseUrl + '/payouts', { headers: headers })
+        ]);
+        
+        // Check all responses
+        var errors = [];
+        var jsons = [];
+        for (var i = 0; i < results.length; i++) {
+            if (!results[i].ok) {
+                errors.push(results[i].status);
+                jsons.push(null);
+            } else {
+                jsons.push(await results[i].json());
+            }
+        }
+        
+        if (errors.length === results.length) {
+            showError('❌ فشل تحميل جميع البيانات. تأكد من صلاحيات المدير.');
+            return;
+        }
+        
+        var statsData = jsons[0] ? (jsons[0].stats || {}) : {};
+        var revenueData = jsons[1] ? (jsons[1].revenue || {}) : {};
+        var usersData = jsons[2] ? (jsons[2].users || []) : [];
+        var dealsData = jsons[3] ? (jsons[3].deals || []) : [];
+        var disputesData = jsons[4] ? (jsons[4].disputes || []) : [];
+        var payoutsData = jsons[5] ? (jsons[5].payouts || []) : [];
+        
+        allData = {
+            stats: statsData,
+            revenue: revenueData,
+            users: usersData,
+            deals: dealsData,
+            disputes: disputesData,
+            payouts: payoutsData
+        };
+        
+        renderStats(statsData);
+        renderRevenue(revenueData);
+        switchTab(currentTab);
+        
+        document.getElementById('lastUpdate').textContent = '🔄 آخر تحديث: ' + new Date().toLocaleTimeString('ar-SA');
+        document.getElementById('loading').style.display = 'none';
+        
+    } catch(e) {
+        showError('❌ خطأ في الاتصال بالخادم: ' + e.message);
+    }
+}
+
+// ============================================
+// Render Stats - NO innerHTML
+// ============================================
+function renderStats(stats) {
+    var container = document.getElementById('adminStats');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    var items = [
+        { value: stats.total_users || 0, label: 'مستخدمين', icon: '👥' },
+        { value: stats.active_deals || 0, label: 'صفقات نشطة', icon: '📋' },
+        { value: formatCurrency(stats.total_volume || 0), label: 'حجم التداول', icon: '💰' },
+        { value: stats.disputes_opened || 0, label: 'نزاعات مفتوحة', icon: '⚖️' }
+    ];
+    
+    items.forEach(function(item) {
+        var widget = document.createElement('div');
+        widget.className = 'stat-widget';
+        
+        var val = document.createElement('div');
+        val.className = 'stat-value';
+        val.textContent = item.value;
+        
+        var lbl = document.createElement('div');
+        lbl.className = 'stat-label';
+        lbl.textContent = item.icon + ' ' + item.label;
+        
+        widget.appendChild(val);
+        widget.appendChild(lbl);
+        container.appendChild(widget);
+    });
+}
+
+// ============================================
+// Render Revenue
+// ============================================
+function renderRevenue(revenue) {
+    var container = document.getElementById('revenue');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    var card = document.createElement('div');
+    card.className = 'revenue-card';
+    
+    var left = document.createElement('div');
+    
+    var val = document.createElement('div');
+    val.className = 'revenue-value';
+    val.textContent = formatCurrency(revenue.this_month || 0);
+    
+    var lbl = document.createElement('div');
+    lbl.className = 'revenue-label';
+    lbl.textContent = 'هذا الشهر';
+    
+    left.appendChild(val);
+    left.appendChild(lbl);
+    
+    var right = document.createElement('div');
+    right.style.textAlign = 'left';
+    
+    var last = document.createElement('div');
+    last.className = 'revenue-label';
+    last.textContent = 'الشهر الماضي: ' + formatCurrency(revenue.last_month || 0);
+    
+    var total = document.createElement('div');
+    total.className = 'revenue-label';
+    total.textContent = 'الإجمالي: ' + formatCurrency(revenue.total || 0);
+    
+    right.appendChild(last);
+    right.appendChild(total);
+    
+    card.appendChild(left);
+    card.appendChild(right);
+    container.appendChild(card);
+}
+
+// ============================================
+// Switch Tab
+// ============================================
+function switchTab(tab) {
+    currentTab = tab;
+    
+    // Update active button
+    var btns = document.querySelectorAll('.tab-btn');
+    btns.forEach(function(b) { b.classList.remove('active'); });
+    var activeBtn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+    if (activeBtn) activeBtn.classList.add('active');
+    
+    var content = document.getElementById('tabContent');
+    while (content.firstChild) content.removeChild(content.firstChild);
+    
+    if (!allData[tab] || !allData[tab].length) {
+        var empty = document.createElement('p');
+        empty.className = 'text-center text-muted';
+        empty.style.padding = '20px';
+        empty.textContent = 'لا توجد بيانات بعد';
+        content.appendChild(empty);
+        return;
+    }
+    
+    switch(tab) {
+        case 'users': renderUsers(allData.users); break;
+        case 'deals': renderDeals(allData.deals); break;
+        case 'disputes': renderDisputes(allData.disputes); break;
+        case 'payouts': renderPayouts(allData.payouts); break;
+    }
+}
+
+// ============================================
+// Render Users - NO innerHTML
+// ============================================
+function renderUsers(users) {
+    var container = document.getElementById('tabContent');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    users.forEach(function(u) {
+        var row = document.createElement('div');
+        row.className = 'user-row';
+        
+        // Avatar
+        var avatar = document.createElement('div');
+        avatar.style.cssText = 'width:40px;height:40px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;';
+        avatar.textContent = (u.username || '?')[0].toUpperCase();
+        
+        // Info
+        var info = document.createElement('div');
+        info.className = 'user-info';
+        
+        var name = document.createElement('div');
+        name.className = 'user-name';
+        name.textContent = u.username || 'غير معروف';
+        
+        var email = document.createElement('div');
+        email.className = 'user-email';
+        email.textContent = u.email || '';
+        
+        info.appendChild(name);
+        info.appendChild(email);
+        
+        // Badge
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        if (u.status === 'active' || u.is_active) {
+            badge.classList.add('badge-success');
+            badge.textContent = 'نشط';
+        } else if (u.status === 'suspended') {
+            badge.classList.add('badge-danger');
+            badge.textContent = 'موقوف';
+        } else {
+            badge.classList.add('badge-warning');
+            badge.textContent = u.status || 'غير معروف';
+        }
+        
+        // Actions
+        var actions = document.createElement('div');
+        actions.className = 'user-actions';
+        
+        var btnView = document.createElement('button');
+        btnView.className = 'action-btn';
+        btnView.textContent = '👁️ عرض';
+        btnView.onclick = function() { alert('معاينة: ' + u.username); };
+        
+        var btnBlock = document.createElement('button');
+        btnBlock.className = 'action-btn warning';
+        btnBlock.textContent = u.is_active ? '🚫 حظر' : '✅ تفعيل';
+        btnBlock.onclick = function() { toggleUserStatus(u.id, u.is_active); };
+        
+        actions.appendChild(btnView);
+        actions.appendChild(btnBlock);
+        
+        row.appendChild(avatar);
+        row.appendChild(info);
+        row.appendChild(badge);
+        row.appendChild(actions);
+        container.appendChild(row);
+    });
+}
+
+// ============================================
+// Render Deals
+// ============================================
+function renderDeals(deals) {
+    var container = document.getElementById('tabContent');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    deals.forEach(function(d) {
+        var row = document.createElement('div');
+        row.className = 'user-row';
+        
+        var info = document.createElement('div');
+        info.className = 'user-info';
+        
+        var title = document.createElement('div');
+        title.className = 'user-name';
+        title.textContent = (d.title || 'صفقة #' + d.id);
+        
+        var details = document.createElement('div');
+        details.className = 'user-email';
+        details.textContent = formatCurrency(d.amount) + ' | ' + (d.status || 'قيد الانتظار');
+        
+        info.appendChild(title);
+        info.appendChild(details);
+        
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        if (d.status === 'active') { badge.classList.add('badge-success'); }
+        else if (d.status === 'disputed') { badge.classList.add('badge-danger'); }
+        else { badge.classList.add('badge-info'); }
+        badge.textContent = d.status || 'جديد';
+        
+        row.appendChild(info);
+        row.appendChild(badge);
+        container.appendChild(row);
+    });
+}
+
+// ============================================
+// Render Disputes
+// ============================================
+function renderDisputes(disputes) {
+    var container = document.getElementById('tabContent');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    disputes.forEach(function(d) {
+        var row = document.createElement('div');
+        row.className = 'user-row';
+        
+        var info = document.createElement('div');
+        info.className = 'user-info';
+        
+        var reason = document.createElement('div');
+        reason.className = 'user-name';
+        reason.textContent = d.reason || 'نزاع #' + d.id;
+        
+        var details = document.createElement('div');
+        details.className = 'user-email';
+        details.textContent = (d.filed_by || '') + ' | ' + (d.status || 'مفتوح');
+        
+        info.appendChild(reason);
+        info.appendChild(details);
+        
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.classList.add(d.status === 'resolved' ? 'badge-success' : 'badge-danger');
+        badge.textContent = d.status === 'resolved' ? 'محلول' : 'مفتوح';
+        
+        var btnResolve = document.createElement('button');
+        btnResolve.className = 'action-btn';
+        btnResolve.textContent = '⚖️ حل';
+        btnResolve.onclick = function() { resolveDispute(d.id); };
+        
+        row.appendChild(info);
+        row.appendChild(badge);
+        row.appendChild(btnResolve);
+        container.appendChild(row);
+    });
+}
+
+// ============================================
+// Render Payouts
+// ============================================
+function renderPayouts(payouts) {
+    var container = document.getElementById('tabContent');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    
+    payouts.forEach(function(p) {
+        var row = document.createElement('div');
+        row.className = 'user-row';
+        
+        var info = document.createElement('div');
+        info.className = 'user-info';
+        
+        var user = document.createElement('div');
+        user.className = 'user-name';
+        user.textContent = p.user || 'مستخدم #' + p.user_id;
+        
+        var amount = document.createElement('div');
+        amount.className = 'user-email';
+        amount.textContent = formatCurrency(p.amount) + ' | ' + (p.method || 'USDT');
+        
+        info.appendChild(user);
+        info.appendChild(amount);
+        
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.classList.add(p.status === 'paid' ? 'badge-success' : 'badge-warning');
+        badge.textContent = p.status === 'paid' ? 'مدفوع' : 'معلق';
+        
+        row.appendChild(info);
+        row.appendChild(badge);
+        container.appendChild(row);
+    });
+}
+
+// ============================================
+// Actions
+// ============================================
+async function toggleUserStatus(userId, currentActive) {
+    var action = currentActive ? 'حظر' : 'تفعيل';
+    if (!confirm('هل أنت متأكد من ' + action + ' هذا المستخدم؟')) return;
+    
+    try {
+        var resp = await fetch('/api/v1/admin/users/' + userId + '/toggle-status', {
+            method: 'POST',
+            headers: getHeaders()
+        });
+        if (resp.ok) {
+            load(); // Refresh data
+        }
+    } catch(e) {
+        alert('فشل ' + action + ' المستخدم');
+    }
+}
+
+async function resolveDispute(disputeId) {
+    var resolution = prompt('قرار حل النزاع:\n1) لصالح البائع\n2) لصالح المشتري\n3) تعويض من الصندوق', '1');
+    if (!resolution) return;
+    
+    try {
+        await fetch('/api/v1/admin/disputes/' + disputeId + '/resolve', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ resolution: parseInt(resolution) })
+        });
+        load();
+    } catch(e) {
+        alert('فشل حل النزاع');
+    }
+}
+
+// ============================================
+// Event Listeners
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Tab clicks
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            switchTab(this.dataset.tab);
+        });
+    });
+    
+    // Auto refresh every 30 seconds
+    setInterval(load, 30000);
+});
+
+// Initial load
 load();
 </script>
 </body></html>

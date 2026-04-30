@@ -13,9 +13,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import pytest
 
 from src.services.chat_service import (
-    ChatService,
-    ChatEvent,
-    MessageStatus,
+    socketio,
+    socketio,
+    socketio,
 )
 
 
@@ -39,7 +39,7 @@ def mock_socketio():
 
 @pytest.fixture
 def chat_service(mock_socketio, mock_redis):
-    return ChatService(
+    return socketio(
         socketio=mock_socketio,
         redis_client=mock_redis,
         message_repository=MagicMock()
@@ -48,13 +48,13 @@ def chat_service(mock_socketio, mock_redis):
 
 @pytest.fixture
 def chat_service_no_redis(mock_socketio):
-    return ChatService(
+    return socketio(
         socketio=mock_socketio,
         message_repository=MagicMock()
     )
 
 
-class TestChatServiceBasic:
+class TestsocketioBasic:
     """اختبارات أساسية"""
     
     def test_initialization(self, chat_service):
@@ -250,7 +250,7 @@ class TestHealthCheck:
 
 
 __all__ = [
-    "TestChatServiceBasic",
+    "TestsocketioBasic",
     "TestAccessControl",
     "TestMessageManagement",
     "TestReactions",
